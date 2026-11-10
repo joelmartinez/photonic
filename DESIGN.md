@@ -45,3 +45,9 @@ attachment. `splat.js` is the reference splat module: config via
 ## Intended consumers
 - The Vomitorium (WebXR endurance experience) — builds on this engine + splat pipeline.
 - Eventually: a published npm package (owner's call, later).
+
+## Feature requirements added 2026-11-10 (Joel)
+
+**Clean overlay rendering.** Photonic must render a clean overlay composited over live video: pose skeletons and similar annotation graphics drawn over a camera feed with crisp, resolution-independent lines and joints, stable frame to frame (no jitter or flicker beyond the data itself), configurable styling, and no debug cruft in the default appearance. This is the rendering path the KataPose visualization uses over the student's camera view, and it must stay clean enough to show to end users, not just developers.
+
+**Virtual camera mode.** A Photonic scene — including the video-plus-overlay composite — must be emittable as a video stream a consumer can use as a camera source: in the browser this is a captured stream of the rendered output (canvas capture into a MediaStream, usable by WebRTC, recording, or downstream apps that accept a stream). A true OS-level virtual camera device would need a native companion and is explicitly a later, separate piece; the engine's job is to produce the stream cleanly and label the mode honestly. Consumers decide what the virtual camera shows: a KataPose creator might stream the clean skeleton view as their class camera feed; a Vomitorium run might stream the spectator view.
