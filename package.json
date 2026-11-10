@@ -1,0 +1,15 @@
+{
+  "name": "@codecube/photonic",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Photonic \u2014 browser-native 3D/WebXR scene engine extracted from codecube.net. MIT licensed. npm publishing happens only on the owner's word.",
+  "type": "module",
+  "main": "src/index.js",
+  "peerDependencies": {
+    "three": "^0.170.0"
+  },
+  "dependencies": {
+    "@sparkjsdev/spark": "*"
+  },
+  "license": "MIT"
+}
