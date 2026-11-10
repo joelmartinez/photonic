@@ -17,3 +17,7 @@ Files are byte-identical to the source at extraction; decoupling is follow-on wo
 lives on this machine; the public GitHub repo joelmartinez/photonic is its mirror.
 It is the future npm library (publishing only on Joel's word) and the rendering
 foundation for the Vomitorium and for the KataPose platform's pose visualization.
+
+## Consuming Photonic before npm publishing
+
+Until Photonic is published to npm, consumers work with an assumed peer checkout: the photonic repo sits in a sibling folder next to the consuming project (same parent folder), and the consumer references it by relative path under its package name — in package.json, `"@codecube/photonic": "file:../photonic"`. Imports stay `from "@codecube/photonic"` everywhere, so switching to the published package later is a one-line dependency change with no code edits. On Muse's machine all repos already live side by side in ~/workspace/repos/, so the layout holds as-is.
