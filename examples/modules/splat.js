@@ -1,4 +1,4 @@
-import { estimateSplatCamera } from '../viz/splatCameraHeuristics';
+import { estimateSplatCamera } from '../../src/splatCameraHeuristics.js';
 
 /**
  * Splat Scene – Gaussian Splat viewer Photonic module
@@ -11,7 +11,7 @@ import { estimateSplatCamera } from '../viz/splatCameraHeuristics';
  *   All fields are optional; sensible defaults are provided.
  *
  *   window.PhotonicSplatConfig = {
- *     url:          "/assets/scans/room.spz",  // path to splat file
+ *     url:          "room.spz",  // path to splat file (required; no asset ships with Photonic)
  *     format:       "auto",                    // "spz"|"ply"|"splat"|"ksplat"|"auto"
  *     position:     [0, 0, 0],                 // world offset [x, y, z]
  *     rotation:     [0, 0, 0],                 // Euler rotation in radians [x, y, z]
@@ -25,9 +25,11 @@ import { estimateSplatCamera } from '../viz/splatCameraHeuristics';
  *   };
  *
  * Asset path:
- *   Place your Scaniverse .spz (or .ply / .splat / .ksplat) file at:
- *     CodeCubeConsole/out/assets/scans/room.spz
- *   (served as /assets/scans/room.spz from the site root)
+ *   No splat asset ships with Photonic. Point url at your own Scaniverse
+ *   .spz (or .ply / .splat / .ksplat) file, served from a path your page
+ *   can reach, and set it through window.PhotonicSplatConfig before load.
+ *   With no url configured the module loads, explains what is missing,
+ *   and shows nothing.
  *
  * Controls (desktop):
  *   Click to lock mouse → WASD to move → mouse to look → ESC to release
@@ -45,7 +47,7 @@ const Metadata = {
 // ─────────────────────────────────────────────────────────────────
 
 const DEFAULT_CONFIG = {
-  url:         '/assets/scans/room.spz',
+  url:         null,
   format:      'auto',
   position:    [0, 0, 0],
   rotation:    [0, 0, 0],
@@ -249,6 +251,15 @@ async function Load(scene) {
 
   // ── Load splat ────────────────────────────────────────────────
 
+  if (!config.url) {
+    loadError = true;
+    const msg = 'No splat asset configured. Set window.PhotonicSplatConfig.url to a .spz, .ply, .splat, or .ksplat file before loading this module.';
+    console.error('[Splat]', msg);
+    showLoading(false);
+    showError(msg);
+    return { splatHandle: null, config };
+  }
+
   try {
     splatHandle = await scene.loadSplat({
       url:      config.url,
@@ -309,7 +320,11 @@ function Unload(scene, _state) {
 // Registration
 // ─────────────────────────────────────────────────────────────────
 
+export { Load, Update, Unload, Metadata };
+
+// Compatibility shim: also register in the global PhotonicModules namespace
 (function () {
+  if (typeof window === 'undefined') return;
   if (!window.PhotonicModules) {
     window.PhotonicModules = {};
   }

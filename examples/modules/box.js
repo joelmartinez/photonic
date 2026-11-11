@@ -3,6 +3,11 @@
  * Demonstrates the Photonic scene module API with a spinning colored box
  */
 
+const Metadata = {
+  title: 'Box',
+  description: 'A spinning colored box. The simplest Photonic scene module.'
+};
+
 // Module state
 let box = null;
 let rotationSpeed = 0.5; // radians per second
@@ -114,8 +119,11 @@ function hslToHex(h, s, l) {
   return parseInt(`${toHex(r)}${toHex(g)}${toHex(b)}`, 16);
 }
 
-// Register this module in the global PhotonicModules namespace
+export { Load, Update, Unload, Metadata };
+
+// Compatibility shim: also register in the global PhotonicModules namespace
 (function() {
+  if (typeof window === 'undefined') return;
   if (!window.PhotonicModules) {
     window.PhotonicModules = {};
   }
@@ -123,6 +131,7 @@ function hslToHex(h, s, l) {
   window.PhotonicModules.box = {
     Load: Load,
     Update: Update,
-    Unload: Unload
+    Unload: Unload,
+    Metadata: Metadata
   };
 })();

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Photonic - standalone demo</title>
+<style>
+  html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; }
+  #photonic-container { position: relative; width: 100%; height: calc(100% - 52px); }
+  #photonic-container canvas { display: block; }
+  header { height: 52px; display: flex; gap: 12px; align-items: center; padding: 0 12px; box-sizing: border-box; }
+  .photonic-loading { opacity: 0.5; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "../../node_modules/three/build/three.module.js",
+    "three/addons/": "../../node_modules/three/examples/jsm/",
+    "three/examples/jsm/": "../../node_modules/three/examples/jsm/",
+    "@sparkjsdev/spark": "../../node_modules/@sparkjsdev/spark/dist/spark.module.js"
+  }
+}
+</script>
+</head>
+<body>
+<header>
+  <strong>Photonic standalone demo</strong>
+  <label class="nav-module-picker">Module
+    <select id="viz-module-select">
+      <option value="">(none)</option>
+      <option value="box.js">box.js</option>
+      <option value="solar-system.js">solar-system.js</option>
+      <option value="liminal.js">liminal.js</option>
+      <option value="splat.js">splat.js</option>
+    </select>
+  </label>
+  <span id="viz-xr-controls" hidden>
+    <button id="viz-enter-xr" type="button">Enter XR</button>
+    <span id="viz-xr-status"></span>
+  </span>
+</header>
+<div id="photonic-container" class="photonic-loading"></div>
+<script type="module" src="./host-page.js"></script>
+</body>
+</html>

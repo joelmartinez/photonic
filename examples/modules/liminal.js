@@ -1,6 +1,8 @@
 /**
  * Liminal Spaces Photonics Module
  *
+ * Optional audio: if a host page provides the Sonance engine as window.Sonance, this module adds ambient audio. Sonance is an optional integration, not part of Photonic; without it the scene loads and runs in full, with audio off.
+ *
  * An infinite backrooms / liminal-space explorer featuring:
  * - Six room types: office hallway, open-plan office, pool backroom,
  *   stairwell, yellow wallpaper room, empty hotel lobby
@@ -1820,7 +1822,7 @@ function registerAudioStartListeners(scene) {
 
 function createLiminalAudio(scene) {
   if (!window.Sonance) {
-    console.error('[LiminalAudio] Sonance audio engine not found. Expected window.Sonance from sonance.gen.js.');
+    console.info('[LiminalAudio] Sonance is not present, so ambient audio is off. Sonance is an optional integration for this module; the scene runs without it.');
     return;
   }
 
@@ -2127,7 +2129,7 @@ function Load(scene) {
   nextActionId = 0;      frameCounter = 0;
   activeDoorAssistKey = null;
   disposeLiminalAudio();
-  threeLib = scene.THREE ?? window.THREE ?? null;
+  threeLib = scene.THREE ?? null;
   createLiminalAudio(scene);
 
   // Starting hallway
@@ -2189,7 +2191,11 @@ function Unload(scene, state) {
 // Registration
 // ─────────────────────────────────────────────
 
+export { Load, Update, Unload, Metadata };
+
+// Compatibility shim: also register in the global PhotonicModules namespace
 (function () {
+  if (typeof window === 'undefined') return;
   if (!window.PhotonicModules) window.PhotonicModules = {};
   window.PhotonicModules['liminal'] = { Load, Update, Unload, Metadata };
 })();

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Photonic - virtual camera demo</title>
+<style>
+  html, body { margin: 0; font-family: system-ui, sans-serif; background: #111827; color: #e5e7eb; }
+  header { padding: 10px 14px; }
+  header p { margin: 6px 0 0; font-size: 14px; max-width: 900px; }
+  main { display: flex; gap: 16px; flex-wrap: wrap; padding: 0 14px 14px; }
+  figure { margin: 0; }
+  figcaption { font-size: 14px; padding: 6px 0; }
+  .stage { position: relative; width: 480px; aspect-ratio: 16 / 9; background: #000; overflow: hidden; }
+  .stage video, .stage .out { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; background: #000; }
+  button { font-size: 14px; padding: 6px 12px; }
+  #status { font-size: 14px; padding: 0 14px 14px; white-space: pre-wrap; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "../../node_modules/three/build/three.module.js",
+    "three/addons/": "../../node_modules/three/examples/jsm/",
+    "three/examples/jsm/": "../../node_modules/three/examples/jsm/",
+    "@sparkjsdev/spark": "../../node_modules/@sparkjsdev/spark/dist/spark.module.js"
+  }
+}
+</script>
+</head>
+<body>
+<header>
+  <strong>Photonic virtual camera (F2 demo)</strong>
+  <p>This is a browser stream, not a camera device in your computer. Code on this page can use it like a camera feed. Other apps cannot pick it in their camera menus. That would need a separate native app.</p>
+</header>
+<main>
+  <figure>
+    <figcaption>Source: live video with the clean pose overlay on top</figcaption>
+    <div class="stage" id="stage">
+      <video id="stage-video" autoplay muted playsinline></video>
+    </div>
+  </figure>
+  <figure>
+    <figcaption>Virtual camera output: the same picture, as a stream, in a second video</figcaption>
+    <div class="stage">
+      <video class="out" id="output-video" autoplay muted playsinline></video>
+    </div>
+  </figure>
+  <figure>
+    <figcaption>Recording of the virtual camera stream</figcaption>
+    <div class="stage">
+      <video class="out" id="recorded-video" controls playsinline></video>
+    </div>
+    <p><button id="record-btn" type="button">Record 2 seconds</button> <a id="download-link" hidden>Download recording</a></p>
+  </figure>
+</main>
+<div id="status">Starting…</div>
+<script type="module" src="./virtual-camera-demo.js"></script>
+</body>
+</html>

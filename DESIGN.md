@@ -30,17 +30,8 @@ attachment. `splat.js` is the reference splat module: config via
 `window.PhotonicSplatConfig` (asset url/format, transform, move speed, autoCamera).
 
 ## Known couplings — decoupling backlog for the spin-off
-1. `src/index.js` imports the Modulation workstream (`../modulation/index.js`,
-   frame context) — host glue coupling, not engine.
-2. `examples/modules/audio-demo.js` and `synth-designer.js` depend on the Sonance /
-   Modulation workstreams (`SonanceSceneManager`, `createPhotonicFrameContext`) that
-   are NOT part of Photonic; they were extracted as-is for reference and will not run
-   standalone until those are stubbed or the modules are trimmed to engine-only.
-3. Example modules import engine helpers via SSG-relative paths (`../viz/...`);
-   in this repo the engine is `src/` — import remapping is part of the first
-   packaging task, deliberately not done during faithful extraction.
-4. Module discovery is webpack-based in the SSG; the standalone library needs its
-   own loader story (the SceneLoader is the seam).
+
+Resolved by D2 (2026-11-10), which executed design/DECOUPLING-PLAN.md in full. That plan is the record: it inventories eleven verified couplings (C1 to C11) and their fixes. In short, the library entry now exports the engine only with no host-page wiring and no Modulation import, relative imports carry .js extensions, the loader loads ES modules with dynamic import() from a configurable base instead of the host's script path, the demo host page and its selector helpers live under examples/host-page/, Spark is pinned and its error text names this package, the supported examples export their lifecycle functions, splat takes its asset only from its config, and audio-demo and synth-designer sit in examples/unsupported/ because they belong to the Sonance and Modulation workstreams. The standalone-consumption test in the plan passes; its evidence is in PROGRESS.md.
 
 ## Intended consumers
 - The Vomitorium (WebXR endurance experience) — builds on this engine + splat pipeline.

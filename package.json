@@ -2,14 +2,71 @@
   "name": "@codecube/photonic",
   "version": "0.1.0",
   "private": false,
-  "description": "Photonic \u2014 browser-native 3D/WebXR scene engine extracted from codecube.net. MIT licensed. npm publishing happens only on the owner's word.",
+  "description": "Photonic — browser-native 3D/WebXR scene engine extracted from codecube.net. MIT licensed. npm publishing happens only on the owner's word.",
+  "keywords": [
+    "three",
+    "webxr",
+    "webgl",
+    "gaussian-splat",
+    "pose-overlay",
+    "virtual-camera",
+    "scene-engine"
+  ],
+  "homepage": "https://github.com/joelmartinez/photonic#readme",
+  "bugs": {
+    "url": "https://github.com/joelmartinez/photonic/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joelmartinez/photonic.git"
+  },
+  "license": "MIT",
   "type": "module",
-  "main": "src/index.js",
+  "main": "./src/index.js",
+  "module": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": {
+      "default": "./src/index.js",
+      "import": "./src/index.js",
+      "types": "./src/index.d.ts"
+    },
+    "./overlay": {
+      "default": "./src/PhotonicOverlay.js",
+      "import": "./src/PhotonicOverlay.js",
+      "types": "./src/PhotonicOverlay.d.ts"
+    },
+    "./package.json": "./package.json",
+    "./virtual-camera": {
+      "default": "./src/PhotonicVirtualCamera.js",
+      "import": "./src/PhotonicVirtualCamera.js",
+      "types": "./src/PhotonicVirtualCamera.d.ts"
+    }
+  },
+  "files": [
+    "src",
+    "examples/modules",
+    "examples/host-page",
+    "examples/quickstart",
+    "examples/overlay-demo",
+    "examples/virtual-camera-demo",
+    "examples/unsupported/README.md",
+    "design/OVERLAY.md",
+    "design/VIRTUAL-CAMERA.md",
+    "design/PACKAGING.md",
+    "CHANGELOG.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "pack:dry-run": "npm pack --dry-run"
+  },
   "peerDependencies": {
     "three": "^0.170.0"
   },
   "dependencies": {
-    "@sparkjsdev/spark": "*"
+    "@sparkjsdev/spark": "^0.1.10"
   },
-  "license": "MIT"
+  "engines": {
+    "node": ">=18"
+  }
 }

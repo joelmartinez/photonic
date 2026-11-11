@@ -1,8 +1,12 @@
 /**
  * PhotonicSceneLoader - Dynamic scene module loading system
  * 
- * Loads external scene modules that define Load, Update, and Unload lifecycle methods.
- * Modules are loaded from the same domain for security.
+ * Loads scene modules that define Load, Update, and Unload lifecycle methods.
+ * Modules are ordinary ES modules loaded with dynamic import() from a
+ * configurable base (options.moduleBaseUrl, or an explicit options.moduleUrls
+ * name-to-URL map), defaulting to ./modules/ beside the consuming page.
+ * A module may export Load/Update/Unload/Metadata, or register the same
+ * shape on window.PhotonicModules as a compatibility shim.
  * 
  * Module interface:
  * - Load(scene): Called when module loads, returns state object
@@ -20,9 +24,12 @@ export class PhotonicSceneLoader {
     this.elapsedTime = 0;
     this.frameNumber = 0;
     this.lastRequestedModuleUrl = null;
-    this.siteVersion = typeof options.siteVersion === 'string'
-      ? options.siteVersion.trim()
-      : '';
+    this.moduleBaseUrl = typeof options.moduleBaseUrl === 'string' && options.moduleBaseUrl
+      ? options.moduleBaseUrl
+      : './modules/';
+    this.moduleUrls = (options.moduleUrls && typeof options.moduleUrls === 'object')
+      ? options.moduleUrls
+      : null;
     
     // Description change callback
     this._onDescriptionChange = null;
@@ -68,8 +75,8 @@ export class PhotonicSceneLoader {
       
       console.log(`Loading Photonic module: ${moduleUrl}`);
 
-      // Dynamically load the script
-      const module = await this._loadScript(moduleUrl);
+      // Dynamically import the module
+      const module = await this._loadModule(moduleUrl, moduleName);
 
       if (!module || typeof module.Load !== 'function') {
         throw new Error(`Module ${moduleName} does not export a Load function`);
@@ -113,61 +120,54 @@ export class PhotonicSceneLoader {
   }
 
   /**
-   * Dynamically load a JavaScript module
-   * @param {string} url - URL of the script to load
+   * Dynamically import a scene module
+   * @param {string} url - URL of the module to import
+   * @param {string} moduleName - Module file name (for the registry shim)
    * @returns {Promise<Object>} The loaded module
    */
-  _loadScript(url) {
-    return new Promise((resolve, reject) => {
-      // Initialize the PhotonicModules namespace if needed
-      if (!window.PhotonicModules) {
-        window.PhotonicModules = {};
-      }
-
-      // Extract module name from URL (e.g., "box" from "/script/photonics/box.js")
-      const moduleName = this._getModuleRegistrationName(url);
-
-      const script = document.createElement('script');
-      script.type = 'text/javascript';
-      script.src = url;
-      script.async = true;
-
-      script.onload = () => {
-        // Give the script time to register itself
-        setTimeout(() => {
-          const module = window.PhotonicModules[moduleName];
-          
-          if (module) {
-            resolve(module);
-          } else {
-            reject(new Error(`Module '${moduleName}' did not register itself in window.PhotonicModules`));
-          }
-        }, 10);
+  async _loadModule(url, moduleName) {
+    let namespace = null;
+    try {
+      namespace = await import(/* @vite-ignore */ url);
+    } catch (error) {
+      // Fall through to the registry shim check before failing.
+      namespace = null;
+      var importError = error;
+    }
+    const candidate = namespace?.Load ? namespace
+      : (namespace?.default?.Load ? namespace.default : null);
+    if (candidate) {
+      return {
+        Load: candidate.Load,
+        Update: candidate.Update,
+        Unload: candidate.Unload,
+        Metadata: candidate.Metadata
       };
-
-      script.onerror = () => {
-        document.head.removeChild(script);
-        reject(new Error(`Failed to load script: ${url}`));
-      };
-      
-      document.head.appendChild(script);
-    });
+    }
+    // Compatibility shim: a module that registered instead of exporting.
+    const registrationName = this._getModuleRegistrationName(url);
+    const registered = (typeof window !== 'undefined' && window.PhotonicModules)
+      ? window.PhotonicModules[registrationName]
+      : null;
+    if (registered && typeof registered.Load === 'function') {
+      return registered;
+    }
+    if (importError) {
+      throw importError;
+    }
+    throw new Error(`Module '${moduleName}' does not export a Load function`);
   }
 
   _buildModuleUrl(moduleName) {
-    const moduleUrl = new URL(`/script/photonics/${moduleName}`, window.location.origin);
-
-    if (this.siteVersion) {
-      moduleUrl.searchParams.set('v', this.siteVersion);
+    if (this.moduleUrls && typeof this.moduleUrls[moduleName] === 'string') {
+      return new URL(this.moduleUrls[moduleName], window.location.href).href;
     }
-
-    return `${moduleUrl.pathname}${moduleUrl.search}`;
+    return new URL(moduleName, new URL(this.moduleBaseUrl, window.location.href)).href;
   }
 
   _getModuleRegistrationName(url) {
-    const resolvedUrl = new URL(url, window.location.origin);
+    const resolvedUrl = new URL(url, window.location.href);
     const fileName = resolvedUrl.pathname.split('/').pop() || '';
-
     return fileName.replace(/\.js$/i, '');
   }
 

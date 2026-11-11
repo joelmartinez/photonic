@@ -6,12 +6,12 @@
  */
 
 import * as THREE from 'three';
-import { PhotonicCamera } from './PhotonicCamera';
-import { PhotonicRenderer } from './PhotonicRenderer';
-import { PhotonicGrid } from './PhotonicGrid';
-import { PhotonicInput } from './PhotonicInput';
-import { PhotonicXRManager } from './PhotonicXRManager';
-import { PhotonicControlSystem } from './PhotonicControlSystem';
+import { PhotonicCamera } from './PhotonicCamera.js';
+import { PhotonicRenderer } from './PhotonicRenderer.js';
+import { PhotonicGrid } from './PhotonicGrid.js';
+import { PhotonicInput } from './PhotonicInput.js';
+import { PhotonicXRManager } from './PhotonicXRManager.js';
+import { PhotonicControlSystem } from './PhotonicControlSystem.js';
 
 export class PhotonicScene {
   constructor(containerElement) {
@@ -1113,10 +1113,10 @@ export class PhotonicScene {
     // Lazy-load Spark so it is not included in the core viz bundle.
     let SplatMesh;
     try {
-      ({ SplatMesh } = await import(/* webpackChunkName: "spark" */ '@sparkjsdev/spark'));
+      ({ SplatMesh } = await import('@sparkjsdev/spark'));
     } catch (err) {
       const msg = `PhotonicScene.loadSplat: failed to load @sparkjsdev/spark – ${err.message}. ` +
-        'Ensure @sparkjsdev/spark is listed in frontend/package.json and the frontend has been built.';
+        'Ensure @sparkjsdev/spark is installed: it is a declared dependency of @codecube/photonic, so install this package\'s dependencies and try again.';
       console.error(msg, err);
       if (onError) onError(new Error(msg));
       throw new Error(msg);

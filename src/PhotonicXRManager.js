@@ -3,7 +3,7 @@ import {
   composeViewerWorldPose,
   createPose,
   solveOriginPoseForViewerPose
-} from './xrPoseMath';
+} from './xrPoseMath.js';
 
 const OPTIONAL_FEATURES = ['local-floor', 'bounded-floor', 'hand-tracking'];
 

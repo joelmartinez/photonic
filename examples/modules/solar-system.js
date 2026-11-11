@@ -8,6 +8,11 @@
  * - Hierarchical transformations where child movements are relative to parent
  */
 
+const Metadata = {
+  title: 'Solar System',
+  description: 'A sun, planet, and moon hierarchy that shows parent-child object attachment.'
+};
+
 // Module constants
 const SUN_RADIUS = 0.8;
 const PLANET_RADIUS = 0.3;
@@ -190,8 +195,11 @@ function hslToHex(h, s, l) {
   return parseInt(`${toHex(r)}${toHex(g)}${toHex(b)}`, 16);
 }
 
-// Register this module in the global PhotonicModules namespace
+export { Load, Update, Unload, Metadata };
+
+// Compatibility shim: also register in the global PhotonicModules namespace
 (function() {
+  if (typeof window === 'undefined') return;
   if (!window.PhotonicModules) {
     window.PhotonicModules = {};
   }
@@ -199,6 +207,7 @@ function hslToHex(h, s, l) {
   window.PhotonicModules['solar-system'] = {
     Load: Load,
     Update: Update,
-    Unload: Unload
+    Unload: Unload,
+    Metadata: Metadata
   };
 })();
