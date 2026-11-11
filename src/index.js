@@ -13,6 +13,7 @@ export { PhotonicInput } from './PhotonicInput.js';
 export { PhotonicXRManager } from './PhotonicXRManager.js';
 export { PhotonicControlSystem } from './PhotonicControlSystem.js';
 export { PhotonicOverlay, createPoseOverlay, normalizePose, deviationColorHex, DEFAULT_OVERLAY_STYLE, POSE_CONNECTIONS, COCO17_JOINT_NAMES } from './PhotonicOverlay.js';
+export { PhotonicSkeleton, createSkeleton, normalizeSkeletonPose, DEFAULT_SKELETON_STYLE } from './PhotonicSkeleton.js';
 export { PhotonicVirtualCamera, createVirtualCamera, captureSceneStream, captureOverlayStream, VIRTUAL_CAMERA_KIND } from './PhotonicVirtualCamera.js';
 export { estimateSplatCamera } from './splatCameraHeuristics.js';
 export { solveOriginPoseForViewerPose, composeViewerWorldPose, createPose } from './xrPoseMath.js';

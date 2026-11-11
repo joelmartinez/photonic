@@ -3,7 +3,7 @@
   "branch": "main",
   "visibility": "public",
   "license": "MIT",
-  "last_synced_commit": "c8576d41e336b11bc1d80ba2302a5fa249f7dd83",
+  "last_synced_commit": "a538b2e28af4e082bacd5b8ee1e6f95fdca94ce3",
   "last_synced_at": "2026-11-10",
   "files_pushed": 29,
   "note": "Local repo is canonical; GitHub is the public mirror, refreshed by snapshot push after roadmap-level changes. npm publishing only on Joel's word."

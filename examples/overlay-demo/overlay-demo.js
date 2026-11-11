@@ -1,5 +1,5 @@
 /**
- * Pose-skeleton-over-video demo for PhotonicOverlay (roadmap F1).
+ * Pose-skeleton-over-video demo for PhotonicOverlay (roadmap F1, F4, F5).
  * The "video" is a synthetic canvas stream, so the demo needs no camera
  * and no video asset: it proves the overlay path, not a capture device.
  */
@@ -32,26 +32,33 @@ video.play().catch(() => {});
 
 // A standing figure in normalized video coordinates. The target pose moves
 // the left wrist up and the right knee out, so those joints carry a real
-// offset: they recolor by magnitude and grow direction arrows.
+// offset: they recolor by magnitude and grow direction arrows. The right
+// wrist target sits toward the camera and the left knee target away from
+// it, so those offsets are mostly depth: their arrows project to almost
+// nothing and the depth rings carry the cue instead (F5). The left elbow
+// and left ankle are below the confidence threshold, so they render as
+// hollow markers and their bones stay hidden (F4).
 function basePose(t, still) {
   const sway = still ? 0 : Math.sin(t / 700) * 0.008;
-  const j = (x, y) => ({ x: x + sway, y });
+  const j = (x, y, confidence = 0.95) => ({ x: x + sway, y, z: 0, confidence });
   return {
     nose: j(0.5, 0.16), left_eye: j(0.485, 0.145), right_eye: j(0.515, 0.145),
     left_ear: j(0.47, 0.155), right_ear: j(0.53, 0.155),
     left_shoulder: j(0.44, 0.26), right_shoulder: j(0.56, 0.26),
-    left_elbow: j(0.40, 0.42), right_elbow: j(0.60, 0.42),
+    left_elbow: j(0.40, 0.42, 0.12), right_elbow: j(0.60, 0.42),
     left_wrist: j(0.38, 0.58), right_wrist: j(0.62, 0.58),
     left_hip: j(0.46, 0.52), right_hip: j(0.54, 0.52),
     left_knee: j(0.45, 0.72), right_knee: j(0.55, 0.72),
-    left_ankle: j(0.44, 0.92), right_ankle: j(0.56, 0.92)
+    left_ankle: j(0.44, 0.92, 0.08), right_ankle: j(0.56, 0.92)
   };
 }
 function targetPose(t, still) {
   const p = basePose(t, still);
-  p.left_wrist = { x: p.left_wrist.x - 0.02, y: p.left_wrist.y - 0.16 };
-  p.right_knee = { x: p.right_knee.x + 0.09, y: p.right_knee.y - 0.03 };
-  p.right_elbow = { x: p.right_elbow.x + 0.03, y: p.right_elbow.y - 0.02 };
+  p.left_wrist = { ...p.left_wrist, x: p.left_wrist.x - 0.02, y: p.left_wrist.y - 0.16 };
+  p.right_knee = { ...p.right_knee, x: p.right_knee.x + 0.09, y: p.right_knee.y - 0.03 };
+  p.right_elbow = { ...p.right_elbow, x: p.right_elbow.x + 0.03, y: p.right_elbow.y - 0.02 };
+  p.right_wrist = { ...p.right_wrist, z: 0.18 };
+  p.left_knee = { ...p.left_knee, z: -0.15 };
   return p;
 }
 
@@ -70,6 +77,8 @@ overlay.start();
 
 document.getElementById('toggle-arrows').addEventListener('change', (e) => overlay.setShowArrows(e.target.checked));
 document.getElementById('toggle-deviation').addEventListener('change', (e) => overlay.setColorByDeviation(e.target.checked));
+document.getElementById('toggle-hollow').addEventListener('change', (e) => overlay.setShowHollowJoints(e.target.checked));
+document.getElementById('toggle-depth-rings').addEventListener('change', (e) => overlay.setShowDepthRings(e.target.checked));
 
 window.PhotonicOverlayDemo = {
   overlay,

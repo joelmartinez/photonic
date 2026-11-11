@@ -40,7 +40,16 @@ export const DEFAULT_OVERLAY_STYLE = {
   deviationAlertColor: 0xef4444,
   arrowColor: 0xfacc15,
   showArrows: true,
-  minArrowLength: 0.01
+  minArrowLength: 0.01,
+  showHollowJoints: true,
+  hollowJointColor: 0xa0aab4,
+  hollowJointOpacity: 0.8,
+  hollowJointScale: 1.05,
+  showDepthRings: true,
+  depthRingOpacity: 0.9,
+  depthRingBaseScale: 1.7,
+  depthRingGain: 1.5,
+  depthRingMinFraction: 0.5
 };
 
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
@@ -67,10 +76,12 @@ function readPoint(raw, index) {
   }
   const p = raw.position || raw.point || raw;
   const name = raw.name || raw.keypoint || (index != null ? COCO17_JOINT_NAMES[index] : undefined);
+  let confidence = raw.confidence ?? raw.score ?? raw.visibility ?? raw.v;
+  if (confidence == null && (raw.seen === false || raw.visible === false)) confidence = 0;
   return {
     name,
     x: p.x ?? 0, y: p.y ?? 0, z: p.z ?? 0,
-    confidence: raw.confidence ?? raw.score,
+    confidence,
     deviation: raw.deviation,
     offset: raw.offset || raw.offsetVector || null
   };
@@ -145,6 +156,8 @@ export class PhotonicOverlay {
     this._pose = new Map();
     this._targetPose = null;
     this._showArrows = options.showArrows ?? this.style.showArrows;
+    this._showHollowJoints = options.showHollowJoints ?? this.style.showHollowJoints;
+    this._showDepthRings = options.showDepthRings ?? this.style.showDepthRings;
     this._colorByDeviation = options.colorByDeviation ?? true;
     this._raf = 0;
     this._running = false;
@@ -184,12 +197,16 @@ export class PhotonicOverlay {
 
   getStyle() { return { ...this.style }; }
   setShowArrows(show) { this._showArrows = !!show; this._applyPose(); this.render(); return this; }
+  setShowHollowJoints(show) { this._showHollowJoints = !!show; this._applyPose(); this.render(); return this; }
+  setShowDepthRings(show) { this._showDepthRings = !!show; this._applyPose(); this.render(); return this; }
   setColorByDeviation(on) { this._colorByDeviation = !!on; this._applyPose(); this.render(); return this; }
   setTargetPose(pose) { this._targetPose = pose ? normalizePose(pose) : null; this._applyPose(); this.render(); return this; }
 
   setPose(pose, options = {}) {
     if (options.targetPose !== undefined) this._targetPose = options.targetPose ? normalizePose(options.targetPose) : null;
     if (options.showArrows !== undefined) this._showArrows = !!options.showArrows;
+    if (options.showHollowJoints !== undefined) this._showHollowJoints = !!options.showHollowJoints;
+    if (options.showDepthRings !== undefined) this._showDepthRings = !!options.showDepthRings;
     if (options.colorByDeviation !== undefined) this._colorByDeviation = !!options.colorByDeviation;
     this._pose = normalizePose(pose);
     this._applyPose();
@@ -220,11 +237,23 @@ export class PhotonicOverlay {
       new THREE.SphereGeometry(1, 24, 16),
       new THREE.MeshBasicMaterial({ color: this.style.glowColor, transparent: true, opacity: this.style.glowOpacity, blending: THREE.AdditiveBlending, depthWrite: false })
     );
+    // Hollow marker for a present but below-confidence joint (F4): a wireframe sphere, matching the KataPose Lab's former local patch.
+    const hollow = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 16, 10),
+      new THREE.MeshBasicMaterial({ color: this.style.hollowJointColor, wireframe: true, transparent: true, opacity: this.style.hollowJointOpacity })
+    );
+    hollow.visible = false;
+    // Depth ring for a mostly-depth offset (F5): flat ring facing the camera, scaled by the signed depth offset in _applyPose.
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.84, 1, 40),
+      new THREE.MeshBasicMaterial({ color: this.style.arrowColor, transparent: true, opacity: this.style.depthRingOpacity, side: THREE.DoubleSide, depthWrite: false })
+    );
+    ring.visible = false;
     const g = new THREE.Group();
-    g.add(glow); g.add(core);
+    g.add(glow); g.add(hollow); g.add(ring); g.add(core);
     g.userData.kind = 'joint'; g.userData.jointName = name;
     this.group.add(g);
-    rec = { name, group: g, core, glow, world: new THREE.Vector3(), deviation: null, offsetWorld: null, visible: false };
+    rec = { name, group: g, core, glow, hollow, ring, world: new THREE.Vector3(), deviation: null, offsetWorld: null, visible: false, present: false, hollowShown: false, depthRing: null };
     this._joints.set(name, rec);
     return rec;
   }
@@ -284,17 +313,44 @@ export class PhotonicOverlay {
       rec.deviation = j.deviation != null ? j.deviation
         : offset ? Math.hypot(offset.x, offset.y, offset.z || 0) : null;
       rec.visible = j.confidence == null || j.confidence >= s.confidenceThreshold;
-      rec.group.visible = rec.visible;
+      rec.present = true;
+      rec.hollowShown = !rec.visible && this._showHollowJoints;
+      rec.group.visible = rec.visible || rec.hollowShown;
+      rec.core.visible = rec.visible;
+      rec.glow.visible = rec.visible;
+      rec.hollow.visible = rec.hollowShown;
       rec.group.position.copy(rec.world);
       rec.core.scale.setScalar(s.jointRadius);
       rec.glow.scale.setScalar(s.jointRadius * s.glowScale);
+      rec.hollow.scale.setScalar(s.jointRadius * s.hollowJointScale);
+      rec.hollow.material.color.setHex(s.hollowJointColor);
+      rec.hollow.material.opacity = s.hollowJointOpacity;
       const color = this._colorByDeviation && rec.deviation != null ? deviationColorHex(rec.deviation, s) : s.jointColor;
       rec.core.material.color.setHex(color);
       rec.glow.material.color.setHex(color);
       rec.glow.material.opacity = s.glowOpacity;
+      // Depth ring (F5): shown when the offset points mostly toward or away from the camera, so its 2D arrow would be near-invisible.
+      rec.depthRing = null;
+      rec.ring.visible = false;
+      if (this._showDepthRings && rec.visible && rec.offsetWorld) {
+        const off = rec.offsetWorld;
+        const len = off.length();
+        const fraction = len > 1e-9 ? Math.abs(off.z) / len : 0;
+        if (fraction >= s.depthRingMinFraction && Math.abs(off.z) > 1e-9) {
+          const factor = Math.min(2, Math.max(0.45, 1 + off.z * s.depthRingGain));
+          const radius = s.jointRadius * s.depthRingBaseScale * factor;
+          rec.ring.scale.setScalar(radius);
+          rec.ring.material.color.setHex(this._colorByDeviation && rec.deviation != null ? deviationColorHex(rec.deviation, s) : s.arrowColor);
+          rec.ring.material.opacity = s.depthRingOpacity;
+          rec.ring.visible = true;
+          rec.depthRing = { radius, depth: offset ? (offset.z || 0) : 0, direction: off.z >= 0 ? 'toward' : 'away', fraction };
+          rec.group.userData.depthRing = rec.depthRing;
+        }
+      }
+      if (!rec.depthRing) delete rec.group.userData.depthRing;
     }
     for (const [name, rec] of this._joints) {
-      if (!seen.has(name)) { rec.visible = false; rec.group.visible = false; rec.deviation = null; rec.offsetWorld = null; }
+      if (!seen.has(name)) { rec.visible = false; rec.present = false; rec.hollowShown = false; rec.depthRing = null; rec.group.visible = false; rec.deviation = null; rec.offsetWorld = null; }
     }
     for (const [a, b] of this.connections) {
       const ra = this._joints.get(a); const rb = this._joints.get(b);
@@ -346,8 +402,21 @@ export class PhotonicOverlay {
 
   getJointWorldPosition(name) {
     const rec = this._joints.get(name);
-    if (!rec || !rec.visible) return null;
+    if (!rec || !rec.present) return null;
     return { x: rec.world.x, y: rec.world.y, z: rec.world.z };
+  }
+
+  // 'seen' for a measured joint, 'hollow' for a present but below-confidence joint shown as a hollow marker, null when absent.
+  getJointState(name) {
+    const rec = this._joints.get(name);
+    if (!rec || !rec.present) return null;
+    return rec.visible ? 'seen' : 'hollow';
+  }
+
+  getDepthRing(name) {
+    const rec = this._joints.get(name);
+    if (!rec || !rec.depthRing || !rec.ring.visible) return null;
+    return { ...rec.depthRing };
   }
 
   getDeviation(name) {
@@ -362,11 +431,15 @@ export class PhotonicOverlay {
   }
 
   getCounts() {
-    let joints = 0; let bones = 0; let arrows = 0;
-    for (const r of this._joints.values()) if (r.visible) joints += 1;
+    let joints = 0; let bones = 0; let arrows = 0; let hollowJoints = 0; let depthRings = 0;
+    for (const r of this._joints.values()) {
+      if (r.visible) joints += 1;
+      if (r.hollowShown && r.group.visible) hollowJoints += 1;
+      if (r.depthRing && r.ring.visible) depthRings += 1;
+    }
     for (const r of this._bones.values()) if (r.group.visible) bones += 1;
     for (const r of this._arrows.values()) if (r.group.visible) arrows += 1;
-    return { joints, bones, arrows };
+    return { joints, bones, arrows, hollowJoints, depthRings };
   }
 
   _videoContentRect() {

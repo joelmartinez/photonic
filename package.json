@@ -1,8 +1,8 @@
 {
   "name": "@codecube/photonic",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": false,
-  "description": "Photonic — browser-native 3D/WebXR scene engine extracted from codecube.net. MIT licensed. npm publishing happens only on the owner's word.",
+  "description": "Photonic \u2014 browser-native 3D/WebXR scene engine extracted from codecube.net. MIT licensed. npm publishing happens only on the owner's word.",
   "keywords": [
     "three",
     "webxr",
@@ -49,9 +49,11 @@
     "examples/host-page",
     "examples/quickstart",
     "examples/overlay-demo",
+    "examples/skeleton-demo",
     "examples/virtual-camera-demo",
     "examples/unsupported/README.md",
     "design/OVERLAY.md",
+    "design/SKELETON-3D.md",
     "design/VIRTUAL-CAMERA.md",
     "design/PACKAGING.md",
     "CHANGELOG.md"

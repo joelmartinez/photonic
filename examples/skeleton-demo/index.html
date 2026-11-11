@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Photonic - 3D skeleton with not-seen dashed bones demo</title>
+<style>
+  html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; background: #10151a; color: #e5e7eb; }
+  header { display: flex; gap: 16px; align-items: center; padding: 10px 14px; flex-wrap: wrap; }
+  #app { position: relative; width: min(960px, 100vw); height: min(600px, 70vh); margin: 0 auto; }
+  #app canvas { display: block; }
+  p.note { max-width: 960px; margin: 8px auto; padding: 0 14px; font-size: 14px; color: #9ca3af; }
+  label { font-size: 14px; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "../../node_modules/three/build/three.module.js",
+    "three/addons/": "../../node_modules/three/examples/jsm/",
+    "three/examples/jsm/": "../../node_modules/three/examples/jsm/",
+    "@sparkjsdev/spark": "../../node_modules/@sparkjsdev/spark/dist/spark.module.js",
+    "@codecube/photonic": "../../src/index.js"
+  }
+}
+</script>
+</head>
+<body>
+<header>
+  <strong>Photonic 3D skeleton (F3 not-seen dashed bones)</strong>
+  <label><input type="checkbox" id="toggle-dashed" checked> Dashed not-seen bones</label>
+  <label><input type="checkbox" id="toggle-hollow" checked> Hollow joints</label>
+</header>
+<div id="app"></div>
+<p class="note">The right knee and right ankle were not measured. Their joints are hollow wireframe spheres and the bones that touch them are dashed lines, not faint cylinders, so the missing leg reads as not measured from any angle. Drag to orbit.</p>
+<script type="module" src="./skeleton-demo.js"></script>
+</body>
+</html>

@@ -128,7 +128,7 @@ export class PhotonicSceneLoader {
   async _loadModule(url, moduleName) {
     let namespace = null;
     try {
-      namespace = await import(/* @vite-ignore */ url);
+      namespace = await import(/* webpackIgnore: true */ /* @vite-ignore */ url);
     } catch (error) {
       // Fall through to the registry shim check before failing.
       namespace = null;

@@ -299,13 +299,22 @@ export interface OverlayStyle {
   arrowColor: number;
   showArrows: boolean;
   minArrowLength: number;
+  showHollowJoints: boolean;
+  hollowJointColor: number;
+  hollowJointOpacity: number;
+  hollowJointScale: number;
+  showDepthRings: boolean;
+  depthRingOpacity: number;
+  depthRingBaseScale: number;
+  depthRingGain: number;
+  depthRingMinFraction: number;
 }
 
 export declare const DEFAULT_OVERLAY_STYLE: OverlayStyle;
 
 export type JointInput =
   | [number, number, number?, number?]
-  | { x: number; y: number; z?: number; confidence?: number; score?: number; deviation?: number; offset?: Vector3Like | [number, number, number]; position?: Vector3Like; point?: Vector3Like; name?: string };
+  | { x: number; y: number; z?: number; confidence?: number; score?: number; visibility?: number; seen?: boolean; visible?: boolean; deviation?: number; offset?: Vector3Like | [number, number, number]; position?: Vector3Like; point?: Vector3Like; name?: string };
 
 export type PoseInput =
   | Record<string, JointInput>
@@ -335,13 +344,24 @@ export interface PhotonicOverlayOptions {
   aspect?: number;
   video?: HTMLVideoElement;
   showArrows?: boolean;
+  showHollowJoints?: boolean;
+  showDepthRings?: boolean;
   colorByDeviation?: boolean;
 }
 
 export interface SetPoseOptions {
   targetPose?: PoseInput;
   showArrows?: boolean;
+  showHollowJoints?: boolean;
+  showDepthRings?: boolean;
   colorByDeviation?: boolean;
+}
+
+export interface DepthRingInfo {
+  radius: number;
+  depth: number;
+  direction: 'toward' | 'away';
+  fraction: number;
 }
 
 export declare class PhotonicOverlay {
@@ -358,14 +378,18 @@ export declare class PhotonicOverlay {
   setStyle(partial?: Partial<OverlayStyle>): this;
   getStyle(): OverlayStyle;
   setShowArrows(show: boolean): this;
+  setShowHollowJoints(show: boolean): this;
+  setShowDepthRings(show: boolean): this;
   setColorByDeviation(on: boolean): this;
   setTargetPose(pose: PoseInput): this;
   setPose(pose: PoseInput, options?: SetPoseOptions): this;
   clear(): this;
   getJointWorldPosition(name: string): Vector3Like | null;
+  getJointState(name: string): 'seen' | 'hollow' | null;
+  getDepthRing(name: string): DepthRingInfo | null;
   getDeviation(name: string): number | null;
   getArrow(name: string): { direction: Vector3Like; length: number } | null;
-  getCounts(): { joints: number; bones: number; arrows: number };
+  getCounts(): { joints: number; bones: number; arrows: number; hollowJoints: number; depthRings: number };
   resize(): this;
   render(): this;
   start(): this;
@@ -374,6 +398,90 @@ export declare class PhotonicOverlay {
 }
 
 export declare function createPoseOverlay(container: HTMLElement, options?: PhotonicOverlayOptions): PhotonicOverlay;
+
+// 3D skeleton (F3, with the F4 hollow marker in 3D)
+
+export interface SkeletonStyle {
+  boneColor: number;
+  boneOpacity: number;
+  boneRadius: number;
+  outlineColor: number;
+  outlineOpacity: number;
+  outlineScale: number;
+  jointColor: number;
+  jointRadius: number;
+  glowColor: number;
+  glowOpacity: number;
+  glowScale: number;
+  confidenceThreshold: number;
+  notSeenBoneColor: number;
+  notSeenBoneOpacity: number;
+  notSeenDashSize: number;
+  notSeenGapSize: number;
+  hollowJointColor: number;
+  hollowJointOpacity: number;
+  hollowJointScale: number;
+  showHollowJoints: boolean;
+  showNotSeenBones: boolean;
+}
+
+export declare const DEFAULT_SKELETON_STYLE: SkeletonStyle;
+
+export type SkeletonJointInput =
+  | [number, number, number?, number?]
+  | { x: number; y: number; z?: number; confidence?: number; score?: number; visibility?: number; seen?: boolean; visible?: boolean; position?: Vector3Like; point?: Vector3Like; name?: string };
+
+export type SkeletonPoseInput =
+  | Record<string, SkeletonJointInput>
+  | SkeletonJointInput[]
+  | Map<string, SkeletonJointInput>
+  | { joints: Record<string, SkeletonJointInput> | SkeletonJointInput[]; keypoints?: never }
+  | { keypoints: SkeletonJointInput[]; joints?: never }
+  | null
+  | undefined;
+
+export interface SkeletonNormalizedJoint {
+  name: string;
+  x: number;
+  y: number;
+  z: number;
+  confidence?: number;
+}
+
+export declare function normalizeSkeletonPose(pose: SkeletonPoseInput, jointNames?: string[]): Map<string, SkeletonNormalizedJoint>;
+
+export interface PhotonicSkeletonOptions {
+  style?: Partial<SkeletonStyle>;
+  connections?: Array<[string, string]>;
+  jointNames?: string[];
+  showHollowJoints?: boolean;
+  showNotSeenBones?: boolean;
+}
+
+export interface SetSkeletonPoseOptions {
+  showHollowJoints?: boolean;
+  showNotSeenBones?: boolean;
+}
+
+export declare class PhotonicSkeleton {
+  constructor(parent: PhotonicScene | unknown, options?: PhotonicSkeletonOptions);
+  style: SkeletonStyle;
+  connections: Array<[string, string]>;
+  jointNames: string[];
+  group: unknown;
+  setStyle(partial?: Partial<SkeletonStyle>): this;
+  getStyle(): SkeletonStyle;
+  setShowHollowJoints(show: boolean): this;
+  setShowNotSeenBones(show: boolean): this;
+  setPose(pose: SkeletonPoseInput, options?: SetSkeletonPoseOptions): this;
+  clear(): this;
+  getJointState(name: string): 'seen' | 'hollow' | null;
+  getBoneState(a: string, b: string): 'seen' | 'dashed' | null;
+  getCounts(): { joints: number; hollowJoints: number; bones: number; dashedBones: number };
+  dispose(): void;
+}
+
+export declare function createSkeleton(parent: PhotonicScene | unknown, options?: PhotonicSkeletonOptions): PhotonicSkeleton;
 
 // Virtual camera (F2)
 

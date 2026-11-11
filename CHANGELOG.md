@@ -4,7 +4,17 @@ All notable changes to Photonic are recorded in this file. The format follows Ke
 
 ## [Unreleased]
 
-Nothing yet. Changes land here first, in the section of the version they will ship in, as part of the same commit that makes them.
+## [0.1.1] - 2026-11-11
+
+### Fixed
+
+- The packaged scene loader's runtime import now carries webpack's ignore comment beside the Vite one (roadmap F6, requested by the codecube.net integration project): webpack no longer replaces the loader's dynamic import of a scene URL with an empty context that throws "Cannot find module" for every URL, so webpack-bundled consumers can load scene modules. Vite and Rollup are unaffected.
+
+### Added
+
+- A 3D skeleton with a not-seen bone style (roadmap F3): the new PhotonicSkeleton in src/PhotonicSkeleton.js, exported from the library entry with createSkeleton, normalizeSkeletonPose, and DEFAULT_SKELETON_STYLE, draws a pose in a PhotonicScene or any THREE scene in the same cyan-blue look as the overlay, except that a bone touching an unmeasured joint is a gray dashed line and that joint is a hollow wireframe sphere, so not-measured reads as not-measured from any angle (design in design/SKELETON-3D.md, demo in examples/skeleton-demo/).
+- Hollow joint markers in the overlay, first-class (roadmap F4): PhotonicOverlay now renders a present but below-confidence joint as a gray wireframe sphere instead of hiding it, matching the behavior the KataPose Lab carried as a local patch on its vendored copy, with the patch's geometry, color, and opacity as the default style; the marker is on by default and toggleable, getJointState reports seen, hollow, or absent per joint, and getCounts counts hollow markers separately (design in design/OVERLAY.md).
+- A depth ring cue in the overlay (roadmap F5): when at least half of a joint's offset points toward or away from the camera, PhotonicOverlay draws a deviation-colored ring at the joint that grows with a toward-camera offset and shrinks with an away offset, so depth misses read clearly where the offset arrow projects to almost nothing; getDepthRing reports the ring per joint and getCounts counts the rings shown (design in design/OVERLAY.md).
 
 ## [0.1.0] — not yet published (prepared 2026-11-10)
 
