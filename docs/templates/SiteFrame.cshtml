@@ -1,0 +1,37 @@
+@inherits Chloroplast.Core.Rendering.ChloroplastTemplateBase<Chloroplast.Core.Rendering.FrameRenderedContent>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@Model.GetMeta("Title")</title>
+    <link href="@Asset("/assets/main.css")" rel="stylesheet" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1><a href="@Href("/")">PHOTONIC</a></h1>
+        </div>
+    </header>
+
+    @Raw(Model.Body)
+
+    <footer>
+        <div class="container">
+            <nav style="text-align: center; margin-bottom: 1rem;">
+                <a href="@Href("/")" class="nav-link" style="display: inline-block; margin: 0 1rem;">Home</a>
+                <a href="https://github.com/joelmartinez/photonic" class="nav-link" style="display: inline-block; margin: 0 1rem;">GitHub</a>
+                <a href="https://codecube.net" class="nav-link" style="display: inline-block; margin: 0 1rem;">Maintainer</a>
+            </nav>
+            <p style="text-align: center; color: var(--text-secondary); margin: 0;">
+                Made with ♥ by <a href="https://codecube.net" style="color: var(--text-accent);">Joel Martinez</a>
+            </p>
+            <p style="text-align: center; color: var(--text-secondary); margin: 0.5rem 0 0 0; font-size: 0.9rem;">
+                Copyright 2026 Joel Martinez
+            </p>
+        </div>
+    </footer>
+</body>
+</html>

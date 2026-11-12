@@ -1,0 +1,24 @@
+---
+# Site configuration file for Photonic library docs
+
+# site basics
+title: Photonic Library Documentation
+email: joel@joelmartinez.dev
+description: >-
+  Documentation for Photonic - a browser-native 3D and WebXR scene engine with linkable scene modules, a clean pose overlay, and a virtual camera mode.
+
+# base URL for sitemap generation
+baseUrl: https://joelmartinez.github.io/photonic/
+basePath: /photonic
+
+# cache busting configuration
+cacheBusting:
+  enabled: true
+
+# razor templates
+templates_folder: templates
+
+# main site folder
+areas:
+  - source_folder: /source
+    output_folder: /

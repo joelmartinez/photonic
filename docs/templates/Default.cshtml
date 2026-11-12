@@ -1,0 +1,12 @@
+﻿@inherits Chloroplast.Core.Rendering.ChloroplastTemplateBase<Chloroplast.Core.Rendering.RenderedContent>
+<div class="container" style="display: flex; gap: 2rem; margin: 2rem auto; max-width: 1200px;">
+    @await PartialAsync("source/menu.md")
+    <div class="main-content">
+        @if (@Model.HasMeta("subtitle"))
+        {
+            <p class="subtitle" style="color: var(--text-secondary); font-size: 1.2rem; margin-bottom: 2rem; font-style: italic;">@Model.GetMeta("subtitle")</p>
+        }
+        
+        @Raw(Model.Body)
+    </div>
+</div>
