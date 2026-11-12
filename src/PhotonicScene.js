@@ -12,20 +12,21 @@ import { PhotonicGrid } from './PhotonicGrid.js';
 import { PhotonicInput } from './PhotonicInput.js';
 import { PhotonicXRManager } from './PhotonicXRManager.js';
 import { PhotonicControlSystem } from './PhotonicControlSystem.js';
+import { bakeAmbientOcclusion as bakeOcclusion, clearBakedAmbientOcclusion as clearOcclusion } from './PhotonicBakedAO.js';
 
 export class PhotonicScene {
-  constructor(containerElement) {
+  constructor(containerElement, options = {}) {
     this.container = containerElement;
     this.THREE = THREE;
-    
+
     // Create Three.js scene
     this.scene = new THREE.Scene();
-    
+
     // Set cornflower blue background to suggest "sky"
     this.scene.background = new THREE.Color(0x6495ed); // Cornflower blue
-    
-    // Initialize renderer
-    this.renderer = new PhotonicRenderer(this.container);
+
+    // Initialize renderer (grading and pixel-ratio options ride along, F8)
+    this.renderer = new PhotonicRenderer(this.container, options);
     
     // Initialize camera (positioned about 1 meter up and back from origin)
     this.camera = new PhotonicCamera(this.container, this.renderer.renderer);
@@ -39,6 +40,9 @@ export class PhotonicScene {
     // Add lighting
     this._setupLighting();
     
+    // Baked ambient occlusion state (F9), set by bakeAmbientOcclusion
+    this._bakedAO = null;
+
     // Track created objects
     this.objects = new Map();
     this.nextObjectId = 1;
@@ -76,6 +80,11 @@ export class PhotonicScene {
     this._frameElapsedTime = 0;
     this._frameNumber = 0;
 
+    // Optional composer chain from construction options (F8)
+    if (options.postProcessing) {
+      this.enablePostProcessing(options.postProcessing === true ? {} : options.postProcessing);
+    }
+
     // Start the shared render loop used by standard rendering and WebXR.
     this._animationLoop = (time, xrFrame) => this.animate(time, xrFrame);
     this._isRenderingEnabled = true;
@@ -92,11 +101,32 @@ export class PhotonicScene {
     this.scene.add(ambientLight);
     this.defaultAmbientLight = ambientLight;
     
-    // Add directional light for shadows and definition
+    // Add directional light for shadows and definition (F7: casts by default)
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
     directionalLight.position.set(5, 10, 7.5);
+    directionalLight.castShadow = true;
+    directionalLight.shadow.mapSize.set(2048, 2048);
+    directionalLight.shadow.camera.left = -7;
+    directionalLight.shadow.camera.right = 7;
+    directionalLight.shadow.camera.top = 7;
+    directionalLight.shadow.camera.bottom = -7;
+    directionalLight.shadow.camera.near = 1;
+    directionalLight.shadow.camera.far = 30;
+    directionalLight.shadow.camera.updateProjectionMatrix();
+    directionalLight.shadow.bias = -0.0002;
+    directionalLight.shadow.normalBias = 0.02;
     this.scene.add(directionalLight);
+    this.scene.add(directionalLight.target);
     this.defaultDirectionalLight = directionalLight;
+  }
+
+  // Shadow flags for a created object (F7): cast and receive by default, cast off for transparent or emissive materials, both overridable per call.
+  _applyShadowFlags(mesh, options = {}) {
+    const material = mesh.material;
+    const transparent = Boolean(material && material.transparent);
+    const emissive = Boolean(material && material.emissive && material.emissive.getHex() !== 0 && (material.emissiveIntensity ?? 1) > 0);
+    mesh.castShadow = options.castShadow !== undefined ? options.castShadow : !(transparent || emissive);
+    mesh.receiveShadow = options.receiveShadow !== undefined ? options.receiveShadow : true;
   }
   
   // ==================== Input API ====================
@@ -271,6 +301,101 @@ export class PhotonicScene {
     this.defaultAmbientLight.color.setHex(color);
   }
   
+  // ==================== Grading and output (F8) ====================
+
+  // Tone mapping mode by friendly name ('aces' by default) or a THREE constant.
+  setToneMapping(mode) {
+    this.renderer.setToneMapping(mode);
+    return this;
+  }
+
+  getToneMapping() {
+    return this.renderer.getToneMapping();
+  }
+
+  // ACES exposure control (F8)
+  setExposure(exposure) {
+    this.renderer.setExposure(exposure);
+    return this;
+  }
+
+  getExposure() {
+    return this.renderer.getExposure();
+  }
+
+  setPixelRatioCap(cap) {
+    this.renderer.setPixelRatioCap(cap);
+    return this;
+  }
+
+  getPixelRatioCap() {
+    return this.renderer.getPixelRatioCap();
+  }
+
+  // Optional GTAO composer chain (F8): ambient occlusion plus the output pass that applies grading.
+  enablePostProcessing(options = {}) {
+    this.renderer.enablePostProcessing(this.scene, this.camera.camera, options);
+    return this;
+  }
+
+  disablePostProcessing() {
+    this.renderer.disablePostProcessing();
+    return this;
+  }
+
+  isPostProcessingEnabled() {
+    return this.renderer.isPostProcessingEnabled();
+  }
+
+  setPostProcessingOptions(options = {}) {
+    this.renderer.setPostProcessingOptions(options);
+    return this;
+  }
+
+  getPostProcessingInfo() {
+    return this.renderer.getPostProcessingInfo();
+  }
+
+  // ==================== Baked ambient occlusion (F9) ====================
+
+  // Bake occlusion from the real geometry at scene build time: per-vertex on the created objects and authored planes, plus a ground texture for the default floor. Static scenes only; handles named in options.exclude neither receive nor cast baked occlusion, so moving objects stay with the screen-space pass.
+  bakeAmbientOcclusion(options = {}) {
+    this.clearBakedAmbientOcclusion();
+    this.scene.updateMatrixWorld(true);
+    const excludedIds = new Set((options.exclude || []).map((handle) => handle?.id));
+    const meshes = [];
+    for (const [id, entry] of this.objects.entries()) {
+      if (entry.mesh?.isMesh && !excludedIds.has(id)) meshes.push(entry.mesh);
+    }
+    const state = bakeOcclusion({
+      receivers: meshes,
+      occluders: meshes,
+      floorMesh: this.grid.floorPlane,
+      options
+    });
+    if (state.ground) this.scene.add(state.ground.mesh);
+    this._bakedAO = state;
+    return this.getBakedAOInfo();
+  }
+
+  clearBakedAmbientOcclusion() {
+    if (!this._bakedAO) return this;
+    clearOcclusion(this._bakedAO);
+    this._bakedAO = null;
+    return this;
+  }
+
+  getBakedAOInfo() {
+    if (!this._bakedAO) return { baked: false };
+    const { stats, options, ground } = this._bakedAO;
+    return {
+      baked: true,
+      ...stats,
+      options: { ...options },
+      ground: ground ? { size: ground.size, resolution: ground.resolution, texelsShaded: ground.texelsShaded } : null
+    };
+  }
+
   /**
    * Create a point light
    * @param {Object} options - Light configuration
@@ -282,11 +407,15 @@ export class PhotonicScene {
       intensity = 1,
       distance = 0,
       decay = 2,
-      position = { x: 0, y: 5, z: 0 }
+      position = { x: 0, y: 5, z: 0 },
+      castShadow = false,
+      shadowMapSize = 1024
     } = options;
-    
+
     const light = new THREE.PointLight(color, intensity, distance, decay);
     light.position.set(position.x, position.y, position.z);
+    light.castShadow = castShadow;
+    light.shadow.mapSize.set(shadowMapSize, shadowMapSize);
     this.scene.add(light);
     
     const lightId = this.nextLightId++;
@@ -310,10 +439,14 @@ export class PhotonicScene {
       penumbra = 0,
       decay = 2,
       position = { x: 0, y: 10, z: 0 },
-      target = { x: 0, y: 0, z: 0 }
+      target = { x: 0, y: 0, z: 0 },
+      castShadow = false,
+      shadowMapSize = 1024
     } = options;
-    
+
     const light = new THREE.SpotLight(color, intensity, distance, angle, penumbra, decay);
+    light.castShadow = castShadow;
+    light.shadow.mapSize.set(shadowMapSize, shadowMapSize);
     light.position.set(position.x, position.y, position.z);
     light.target.position.set(target.x, target.y, target.z);
     this.scene.add(light);
@@ -357,7 +490,17 @@ export class PhotonicScene {
         light.intensity = intensity;
         return this;
       },
-      
+
+      // Turn shadow casting on or off for this light (F7)
+      setCastShadow(enabled) {
+        light.castShadow = enabled;
+        return this;
+      },
+
+      getCastShadow() {
+        return light.castShadow;
+      },
+
       remove() {
         sceneRef.scene.remove(light);
         sceneRef.lights.delete(lightId);
@@ -508,12 +651,13 @@ export class PhotonicScene {
     
     mesh.position.set(position.x, position.y, position.z);
     mesh.rotation.set(rotation.x, rotation.y, rotation.z);
-    
+    this._applyShadowFlags(mesh, options);
+
     this.scene.add(mesh);
 
     return this._registerSceneObject(mesh, options);
   }
-  
+
   /**
    * Create a wall (vertical plane) in the scene
    * @param {Object} options - Wall configuration
@@ -565,12 +709,13 @@ export class PhotonicScene {
     
     mesh.position.set(position.x, position.y, position.z);
     mesh.rotation.set(rotation.x, rotation.y, rotation.z);
-    
+    this._applyShadowFlags(mesh, options);
+
     this.scene.add(mesh);
 
     return this._registerSceneObject(mesh, options);
   }
-  
+
   /**
    * Create a sphere in the scene
    * @param {Object} options - Sphere configuration
@@ -589,14 +734,15 @@ export class PhotonicScene {
     const geometry = new THREE.SphereGeometry(radius, widthSegments, heightSegments);
     const mat = material || new THREE.MeshStandardMaterial({ color });
     const mesh = new THREE.Mesh(geometry, mat);
-    
+
     mesh.position.set(position.x, position.y, position.z);
-    
+    this._applyShadowFlags(mesh, options);
+
     this.scene.add(mesh);
 
     return this._registerSceneObject(mesh, options);
   }
-  
+
   // ==================== Grid/Floor Control ====================
   
   /**
@@ -635,12 +781,13 @@ export class PhotonicScene {
     
     mesh.position.set(position.x, position.y, position.z);
     mesh.rotation.set(rotation.x, rotation.y, rotation.z);
-    
+    this._applyShadowFlags(mesh, options);
+
     this.scene.add(mesh);
 
     return this._registerSceneObject(mesh, options);
   }
-  
+
   /**
    * Create an arrow in the scene
    * @param {Object} options - Arrow configuration {origin, direction, length, color}
@@ -822,6 +969,17 @@ export class PhotonicScene {
         return this;
       },
       
+      // Shadow flags (F7)
+      setCastShadow(enabled) {
+        mesh.castShadow = enabled;
+        return this;
+      },
+
+      setReceiveShadow(enabled) {
+        mesh.receiveShadow = enabled;
+        return this;
+      },
+
       // Visibility
       setVisible(visible) {
         mesh.visible = visible;
@@ -1198,6 +1356,7 @@ export class PhotonicScene {
     window.removeEventListener('resize', this._resizeHandler);
     this.clearFrameCallback();
     this.controls.dispose();
+    this.clearBakedAmbientOcclusion();
     this.clearObjects();
     if (this._isWatchingClicks) {
       this.renderer.renderer.domElement.removeEventListener('click', this._onSceneClick);

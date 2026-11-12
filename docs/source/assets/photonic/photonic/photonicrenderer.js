@@ -25,7 +25,18 @@ const TONE_MAPPING_MODES = {
 };
 
 const DEFAULT_PIXEL_RATIO_CAP = 2;
-const DEFAULT_AO_OPTIONS = { blendIntensity: 1 };
+
+// Screen-space AO defaults (F9 retune): the GTAO pass now only does contact darkening for things that move, so it runs wider and softer than the F8 defaults and its strength is capped below black. Static occlusion is the baked pass's job (PhotonicScene.bakeAmbientOcclusion).
+const AO_BLEND_CEILING = 0.85;
+const DEFAULT_AO_OPTIONS = {
+  blendIntensity: 0.55,
+  radius: 0.9,
+  distanceExponent: 1.5,
+  distanceFallOff: 0.5,
+  scale: 0.9,
+  denoiseRadius: 14,
+  denoiseSamples: 24
+};
 
 function resolveToneMapping(mode) {
   if (typeof mode === 'number') return mode;
@@ -156,6 +167,7 @@ export class PhotonicRenderer {
       enabled: this._postProcessingEnabled,
       active: this._postProcessingEnabled && this._composer !== null && !this.renderer.xr.isPresenting,
       ao: 'gtao',
+      blendCeiling: AO_BLEND_CEILING,
       aoOptions: { ...this._aoOptions },
       toneMapping: this.getToneMapping(),
       exposure: this.getExposure(),
@@ -165,10 +177,18 @@ export class PhotonicRenderer {
   }
 
   _applyAOOptions() {
-    const { blendIntensity, ...gtaoParameters } = this._aoOptions;
-    if (blendIntensity !== undefined) this._aoPass.blendIntensity = blendIntensity;
+    const { blendIntensity, denoiseRadius, denoiseSamples, denoiseRings, denoiseRadiusExponent, ...gtaoParameters } = this._aoOptions;
+    // Intensity ceiling (F9): the dynamic pass may darken contact, never crush it toward black, however it is tuned.
+    if (blendIntensity !== undefined) this._aoPass.blendIntensity = Math.min(blendIntensity, AO_BLEND_CEILING);
     const parameters = Object.fromEntries(Object.entries(gtaoParameters).filter(([, v]) => v !== undefined));
     if (Object.keys(parameters).length > 0) this._aoPass.updateGtaoMaterial(parameters);
+    // Softening (F9): the pass's Poisson denoise runs wider than stock so the result is a soft contact shade, never a hard band.
+    const pdParameters = {};
+    if (denoiseRadius !== undefined) pdParameters.radius = denoiseRadius;
+    if (denoiseSamples !== undefined) pdParameters.samples = denoiseSamples;
+    if (denoiseRings !== undefined) pdParameters.rings = denoiseRings;
+    if (denoiseRadiusExponent !== undefined) pdParameters.radiusExponent = denoiseRadiusExponent;
+    if (Object.keys(pdParameters).length > 0) this._aoPass.updatePdMaterial(pdParameters);
   }
 
   _buildComposer(scene, camera) {

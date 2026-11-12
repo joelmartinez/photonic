@@ -17,6 +17,8 @@ export interface SceneObjectHandle {
   setScale(x: number, y: number, z: number): SceneObjectHandle;
   getScale(): Vector3Like;
   setColor(color: ColorValue): SceneObjectHandle;
+  setCastShadow(enabled: boolean): SceneObjectHandle;
+  setReceiveShadow(enabled: boolean): SceneObjectHandle;
   setVisible(visible: boolean): SceneObjectHandle;
   isVisible(): boolean;
   attach(child: SceneObjectHandle): SceneObjectHandle;
@@ -33,6 +35,8 @@ export interface LightHandle {
   getPosition(): Vector3Like;
   setColor(color: ColorValue): LightHandle;
   setIntensity(intensity: number): LightHandle;
+  setCastShadow(enabled: boolean): LightHandle;
+  getCastShadow(): boolean;
   remove(): void;
 }
 
@@ -55,6 +59,8 @@ export interface CreateShapeOptions {
   position?: Partial<Vector3Like>;
   rotation?: Partial<Vector3Like>;
   material?: unknown;
+  castShadow?: boolean;
+  receiveShadow?: boolean;
   [key: string]: unknown;
 }
 
@@ -85,8 +91,68 @@ export interface XRState {
   error: unknown;
 }
 
+export type ToneMappingMode = 'none' | 'linear' | 'reinhard' | 'cineon' | 'aces' | 'agx' | 'neutral' | number;
+
+export interface PostProcessingOptions {
+  blendIntensity?: number;
+  radius?: number;
+  distanceExponent?: number;
+  distanceFallOff?: number;
+  thickness?: number;
+  scale?: number;
+  samples?: number;
+  denoiseRadius?: number;
+  denoiseSamples?: number;
+  denoiseRings?: number;
+  denoiseRadiusExponent?: number;
+}
+
+export interface PostProcessingInfo {
+  enabled: boolean;
+  active: boolean;
+  ao: 'gtao';
+  blendCeiling: number;
+  aoOptions: PostProcessingOptions;
+  toneMapping: ToneMappingMode;
+  exposure: number;
+  pixelRatio: number;
+  pixelRatioCap: number;
+}
+
+export interface BakedAOOptions {
+  radius?: number;
+  samples?: number;
+  intensity?: number;
+  minVisibility?: number;
+  tessellation?: number;
+  groundTexture?: boolean;
+  groundResolution?: number;
+  groundSamples?: number;
+  exclude?: SceneObjectHandle[];
+}
+
+export interface BakedAOInfo {
+  baked: boolean;
+  vertices?: number;
+  raysCast?: number;
+  meshes?: number;
+  occluders?: number;
+  durationMs?: number;
+  meanVisibility?: number;
+  minVisibilityObserved?: number;
+  options?: Required<Omit<BakedAOOptions, 'exclude'>>;
+  ground?: { size: number; resolution: number; texelsShaded: number } | null;
+}
+
+export interface PhotonicSceneOptions {
+  exposure?: number;
+  toneMapping?: ToneMappingMode;
+  pixelRatioCap?: number;
+  postProcessing?: boolean | PostProcessingOptions;
+}
+
 export declare class PhotonicScene {
-  constructor(containerElement: HTMLElement);
+  constructor(containerElement: HTMLElement, options?: PhotonicSceneOptions);
   readonly container: HTMLElement;
   readonly THREE: unknown;
   scene: unknown;
@@ -118,6 +184,20 @@ export declare class PhotonicScene {
   getDescription(): string;
   setBackgroundColor(color: ColorValue): void;
   setAmbientLight(options?: { intensity?: number; color?: ColorValue }): void;
+  setToneMapping(mode: ToneMappingMode): this;
+  getToneMapping(): ToneMappingMode;
+  setExposure(exposure: number): this;
+  getExposure(): number;
+  setPixelRatioCap(cap: number): this;
+  getPixelRatioCap(): number;
+  enablePostProcessing(options?: PostProcessingOptions): this;
+  disablePostProcessing(): this;
+  isPostProcessingEnabled(): boolean;
+  setPostProcessingOptions(options?: PostProcessingOptions): this;
+  getPostProcessingInfo(): PostProcessingInfo;
+  bakeAmbientOcclusion(options?: BakedAOOptions): BakedAOInfo;
+  clearBakedAmbientOcclusion(): this;
+  getBakedAOInfo(): BakedAOInfo;
   createPointLight(options?: Record<string, unknown>): LightHandle;
   createSpotLight(options?: Record<string, unknown>): LightHandle;
   createMaterial(options?: Record<string, unknown>): unknown;
@@ -193,9 +273,29 @@ export declare class PhotonicCamera {
   dispose(): void;
 }
 
+export interface PhotonicRendererOptions {
+  exposure?: number;
+  toneMapping?: ToneMappingMode;
+  pixelRatioCap?: number;
+  aoOptions?: PostProcessingOptions;
+}
+
 export declare class PhotonicRenderer {
-  constructor(containerElement: HTMLElement);
+  constructor(containerElement: HTMLElement, options?: PhotonicRendererOptions);
   renderer: unknown;
+  pixelRatioCap: number;
+  setToneMapping(mode: ToneMappingMode): this;
+  getToneMapping(): ToneMappingMode;
+  setExposure(exposure: number): this;
+  getExposure(): number;
+  setPixelRatioCap(cap: number): this;
+  getPixelRatioCap(): number;
+  getPixelRatio(): number;
+  enablePostProcessing(scene?: unknown, camera?: unknown, options?: PostProcessingOptions): this;
+  disablePostProcessing(): this;
+  isPostProcessingEnabled(): boolean;
+  setPostProcessingOptions(options?: PostProcessingOptions): this;
+  getPostProcessingInfo(): PostProcessingInfo;
   render(scene: unknown, camera: unknown): void;
   setAnimationLoop(callback: ((time: number, xrFrame?: unknown) => void) | null): void;
   handleResize(): void;

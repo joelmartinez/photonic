@@ -12,6 +12,7 @@ import { PhotonicGrid } from './photonicgrid.js';
 import { PhotonicInput } from './photonicinput.js';
 import { PhotonicXRManager } from './photonicxrmanager.js';
 import { PhotonicControlSystem } from './photoniccontrolsystem.js';
+import { bakeAmbientOcclusion as bakeOcclusion, clearBakedAmbientOcclusion as clearOcclusion } from './photonicbakedao.js';
 
 export class PhotonicScene {
   constructor(containerElement, options = {}) {
@@ -39,6 +40,9 @@ export class PhotonicScene {
     // Add lighting
     this._setupLighting();
     
+    // Baked ambient occlusion state (F9), set by bakeAmbientOcclusion
+    this._bakedAO = null;
+
     // Track created objects
     this.objects = new Map();
     this.nextObjectId = 1;
@@ -350,6 +354,46 @@ export class PhotonicScene {
 
   getPostProcessingInfo() {
     return this.renderer.getPostProcessingInfo();
+  }
+
+  // ==================== Baked ambient occlusion (F9) ====================
+
+  // Bake occlusion from the real geometry at scene build time: per-vertex on the created objects and authored planes, plus a ground texture for the default floor. Static scenes only; handles named in options.exclude neither receive nor cast baked occlusion, so moving objects stay with the screen-space pass.
+  bakeAmbientOcclusion(options = {}) {
+    this.clearBakedAmbientOcclusion();
+    this.scene.updateMatrixWorld(true);
+    const excludedIds = new Set((options.exclude || []).map((handle) => handle?.id));
+    const meshes = [];
+    for (const [id, entry] of this.objects.entries()) {
+      if (entry.mesh?.isMesh && !excludedIds.has(id)) meshes.push(entry.mesh);
+    }
+    const state = bakeOcclusion({
+      receivers: meshes,
+      occluders: meshes,
+      floorMesh: this.grid.floorPlane,
+      options
+    });
+    if (state.ground) this.scene.add(state.ground.mesh);
+    this._bakedAO = state;
+    return this.getBakedAOInfo();
+  }
+
+  clearBakedAmbientOcclusion() {
+    if (!this._bakedAO) return this;
+    clearOcclusion(this._bakedAO);
+    this._bakedAO = null;
+    return this;
+  }
+
+  getBakedAOInfo() {
+    if (!this._bakedAO) return { baked: false };
+    const { stats, options, ground } = this._bakedAO;
+    return {
+      baked: true,
+      ...stats,
+      options: { ...options },
+      ground: ground ? { size: ground.size, resolution: ground.resolution, texelsShaded: ground.texelsShaded } : null
+    };
   }
 
   /**
@@ -1312,6 +1356,7 @@ export class PhotonicScene {
     window.removeEventListener('resize', this._resizeHandler);
     this.clearFrameCallback();
     this.controls.dispose();
+    this.clearBakedAmbientOcclusion();
     this.clearObjects();
     if (this._isWatchingClicks) {
       this.renderer.renderer.domElement.removeEventListener('click', this._onSceneClick);
