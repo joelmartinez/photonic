@@ -3,8 +3,8 @@
   "branch": "main",
   "visibility": "public",
   "license": "MIT",
-  "last_synced_commit": "a538b2e28af4e082bacd5b8ee1e6f95fdca94ce3",
-  "last_synced_at": "2026-11-10",
-  "files_pushed": 29,
-  "note": "Local repo is canonical; GitHub is the public mirror, refreshed by snapshot push after roadmap-level changes. npm publishing only on Joel's word."
+  "last_synced_commit": "f2a3dcecfd4ea433253b1aa4440acc2b1d3443ff",
+  "last_synced_at": "2026-11-12",
+  "files_pushed": 62,
+  "note": "Local repo is canonical; GitHub is the public mirror, refreshed by snapshot push after roadmap-level changes. 0.2.0 pushed 2026-11-12 (public main 22ce6ae2). Excluded as always: .github/workflows/docs.yml (the GitHub App lacks the workflows permission; Joel adds it by hand) and binary evidence captures (text-only push). npm publishing only on Joel\u2019s word."
 }

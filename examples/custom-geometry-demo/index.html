@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Photonic - custom geometry demo (F10/F11)</title>
+<style>
+  html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; background: #14120f; color: #e5e7eb; }
+  header { display: flex; gap: 16px; align-items: center; padding: 10px 14px; flex-wrap: wrap; }
+  #app { position: relative; width: min(960px, 100vw); height: min(600px, 70vh); margin: 0 auto; }
+  #app canvas { display: block; }
+  p.note { max-width: 960px; margin: 8px auto; padding: 0 14px; font-size: 14px; color: #9ca3af; }
+  label { font-size: 14px; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "../../node_modules/three/build/three.module.js",
+    "three/addons/": "../../node_modules/three/examples/jsm/",
+    "three/examples/jsm/": "../../node_modules/three/examples/jsm/",
+    "@sparkjsdev/spark": "../../node_modules/@sparkjsdev/spark/dist/spark.module.js",
+    "@codecube/photonic": "../../src/index.js"
+  }
+}
+</script>
+</head>
+<body>
+<header>
+  <strong>Photonic custom geometry (F10 external geometry, F11 baked occlusion over it)</strong>
+  <label><input type="checkbox" id="toggle-bake"> Baked ambient occlusion</label>
+  <span id="bake-status" style="font-size: 14px;">Not baked.</span>
+</header>
+<div id="app"></div>
+<p class="note">The machined part in the middle was never built by a Photonic creator: it arrived as JSCAD-shaped polygon data (positions, flat normals, per-part colours) through scene.addGeometry. The red knob arrived as a caller-built group through scene.addMesh, and the green box as a raw indexed BufferGeometry with no normals. Tick the bake box and all of them take the same baked contact shading as the engine-made plinth. Drag to orbit.</p>
+<script type="module" src="./custom-geometry-demo.js"></script>
+</body>
+</html>

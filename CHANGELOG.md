@@ -4,6 +4,17 @@ All notable changes to Photonic are recorded in this file. The format follows Ke
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-13
+
+### Added
+
+- A public way to add externally supplied geometry to a scene (roadmap F10, requested by HootCAD): `scene.addGeometry({ positions, normals, indices, colors, uvs })` builds a mesh from raw arrays in the shape polygon data arrives in (normals computed when absent, per-vertex colours honoured, a ready BufferGeometry accepted instead), and `scene.addMesh(mesh, options)` adopts a caller-built THREE.Mesh, Group, or Object3D whole. Both return the standard scene handle — transforms, materials, cast and receive shadows under the creators' rule, click handlers, removal through the handle, removeObject, and clearObjects — and a group handle recolours and reflags every mesh inside it. Handles also gain getMesh(), returning the underlying THREE object. Design and verification in design/F10-F11-EXTERNAL-GEOMETRY.md, runnable proof in examples/custom-geometry-demo/.
+- Baked ambient occlusion over externally supplied geometry (roadmap F11, requested by HootCAD): the bake now collects every mesh under a registered object (adopted groups included), a single solid occludes itself so a merged CAD part shades its own recesses, vertex colours a geometry arrives with are darkened by the bake and restored exactly on clear instead of being replaced, and adopted geometry's footprint reaches the ground texture like a created object's. The bake's ray casts run against a BVH over the occluders' world-space triangles, so a CAD-sized model stays in the same cost order as the engine's own shapes (about 1.3 seconds for a 38,800-triangle part with the ground pass, measured in the design record), and getBakedAOInfo() reports the occluder triangle count.
+
+### Fixed
+
+- A scene object's handle.remove() now drops the object from the scene's registry as removeObject already did, so a removed object no longer counts in scene.objects or reaches a later bake with disposed geometry.
+
 ## [0.2.0] - 2026-11-12
 
 ### Added

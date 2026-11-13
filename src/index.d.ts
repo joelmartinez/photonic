@@ -10,6 +10,7 @@ export type ColorValue = number | string;
 
 export interface SceneObjectHandle {
   readonly id: number;
+  getMesh(): unknown;
   setPosition(x: number, y: number, z: number): SceneObjectHandle;
   getPosition(): Vector3Like;
   setRotation(x: number, y: number, z: number): SceneObjectHandle;
@@ -61,6 +62,48 @@ export interface CreateShapeOptions {
   material?: unknown;
   castShadow?: boolean;
   receiveShadow?: boolean;
+  [key: string]: unknown;
+}
+
+export interface ExternalGeometryOptions {
+  positions?: ArrayLike<number>;
+  normals?: ArrayLike<number> | null;
+  indices?: ArrayLike<number> | null;
+  colors?: ArrayLike<number> | null;
+  uvs?: ArrayLike<number> | null;
+  geometry?: unknown;
+  material?: unknown;
+  color?: ColorValue;
+  roughness?: number;
+  metalness?: number;
+  opacity?: number;
+  transparent?: boolean;
+  doubleSided?: boolean;
+  position?: Partial<Vector3Like>;
+  rotation?: Partial<Vector3Like>;
+  scale?: number | Partial<Vector3Like>;
+  castShadow?: boolean;
+  receiveShadow?: boolean;
+  name?: string;
+  disposeOnRemove?: boolean;
+  onClick?: ((handle: SceneObjectHandle, event?: unknown) => void) | null;
+  [key: string]: unknown;
+}
+
+export interface AddMeshOptions {
+  mesh?: unknown;
+  object?: unknown;
+  group?: unknown;
+  geometry?: unknown;
+  material?: unknown;
+  position?: Partial<Vector3Like>;
+  rotation?: Partial<Vector3Like>;
+  scale?: number | Partial<Vector3Like>;
+  castShadow?: boolean;
+  receiveShadow?: boolean;
+  name?: string;
+  disposeOnRemove?: boolean;
+  onClick?: ((handle: SceneObjectHandle, event?: unknown) => void) | null;
   [key: string]: unknown;
 }
 
@@ -135,6 +178,7 @@ export interface BakedAOInfo {
   baked: boolean;
   vertices?: number;
   raysCast?: number;
+  triangles?: number;
   meshes?: number;
   occluders?: number;
   durationMs?: number;
@@ -207,6 +251,9 @@ export declare class PhotonicScene {
   createCylinder(options?: CreateShapeOptions & { radiusTop?: number; radiusBottom?: number; height?: number; radialSegments?: number }): SceneObjectHandle;
   createSphere(options?: CreateShapeOptions & { radius?: number; widthSegments?: number; heightSegments?: number }): SceneObjectHandle;
   createBox(options?: CreateShapeOptions & { width?: number; height?: number; depth?: number }): SceneObjectHandle;
+  addGeometry(options: ExternalGeometryOptions): SceneObjectHandle;
+  addMesh(mesh: unknown, options?: AddMeshOptions): SceneObjectHandle;
+  addMesh(options: AddMeshOptions & { mesh: unknown }): SceneObjectHandle;
   createArrow(options?: { origin?: Partial<Vector3Like>; direction?: Partial<Vector3Like>; length?: number; color?: ColorValue; headLength?: number; headWidth?: number }): SceneObjectHandle;
   setGridVisible(visible: boolean): void;
   setFloorVisible(visible: boolean): void;

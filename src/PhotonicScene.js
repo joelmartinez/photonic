@@ -358,6 +358,19 @@ export class PhotonicScene {
 
   // ==================== Baked ambient occlusion (F9) ====================
 
+  // Leaf meshes under a registered object: a plain mesh yields itself, a group (external geometry, F10/F11) yields every mesh inside it.
+  _collectObjectMeshes(root) {
+    const meshes = [];
+    if (!root) return meshes;
+    if (root.isMesh) meshes.push(root);
+    if (typeof root.traverse === 'function') {
+      root.traverse((child) => {
+        if (child !== root && child.isMesh) meshes.push(child);
+      });
+    }
+    return meshes;
+  }
+
   // Bake occlusion from the real geometry at scene build time: per-vertex on the created objects and authored planes, plus a ground texture for the default floor. Static scenes only; handles named in options.exclude neither receive nor cast baked occlusion, so moving objects stay with the screen-space pass.
   bakeAmbientOcclusion(options = {}) {
     this.clearBakedAmbientOcclusion();
@@ -365,7 +378,8 @@ export class PhotonicScene {
     const excludedIds = new Set((options.exclude || []).map((handle) => handle?.id));
     const meshes = [];
     for (const [id, entry] of this.objects.entries()) {
-      if (entry.mesh?.isMesh && !excludedIds.has(id)) meshes.push(entry.mesh);
+      if (excludedIds.has(id)) continue;
+      meshes.push(...this._collectObjectMeshes(entry.mesh));
     }
     const state = bakeOcclusion({
       receivers: meshes,
@@ -812,9 +826,100 @@ export class PhotonicScene {
     return this._registerSceneObject(arrow, options);
   }
 
+  // ==================== External geometry (F10) ====================
+
+  // Add geometry the caller built — the JSCAD shape of data: flat positions with optional normals, indices, per-vertex colours, and uvs, or a ready BufferGeometry in options.geometry. Returns the same handle the creators return (roadmap F10).
+  addGeometry(options = {}) {
+    let geometry = options.geometry || null;
+    if (!geometry) {
+      const { positions, normals = null, indices = null, colors = null, uvs = null } = options;
+      if (!positions || positions.length === 0 || positions.length % 3 !== 0) {
+        throw new Error('PhotonicScene.addGeometry: options.positions must be a non-empty xyz array (or pass a BufferGeometry as options.geometry)');
+      }
+      const vertexCount = positions.length / 3;
+      geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      if (indices) geometry.setIndex(Array.from(indices));
+      if (normals) {
+        geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+      } else {
+        geometry.computeVertexNormals();
+      }
+      if (colors) {
+        const itemSize = colors.length / vertexCount;
+        if (itemSize !== 3 && itemSize !== 4) {
+          throw new Error('PhotonicScene.addGeometry: options.colors must carry 3 or 4 components per vertex');
+        }
+        geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, itemSize));
+      }
+      if (uvs) geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+      geometry.computeBoundingSphere();
+    }
+
+    if (!geometry.attributes.normal && geometry.attributes.position) geometry.computeVertexNormals();
+    const hasVertexColors = Boolean(geometry.attributes.color);
+    const mat = options.material || new THREE.MeshStandardMaterial({
+      color: options.color !== undefined ? options.color : (hasVertexColors ? 0xffffff : 0xb8bcc2),
+      roughness: options.roughness ?? 0.65,
+      metalness: options.metalness ?? 0.15,
+      transparent: options.transparent ?? false,
+      opacity: options.opacity ?? 1,
+      vertexColors: hasVertexColors,
+      side: options.doubleSided ? THREE.DoubleSide : THREE.FrontSide
+    });
+    if (hasVertexColors && mat.vertexColors !== true && options.material) {
+      mat.vertexColors = true;
+      mat.needsUpdate = true;
+    }
+
+    const mesh = new THREE.Mesh(geometry, mat);
+    return this._adoptExternalObject(mesh, options);
+  }
+
+  // Add a mesh (or group of meshes) the caller built with THREE directly. Takes addMesh(mesh, options) or addMesh({ mesh, ...options }); a bare BufferGeometry routes to addGeometry. The object joins the scene under the same defaults the creators use (roadmap F10).
+  addMesh(meshOrOptions, maybeOptions = {}) {
+    let target = meshOrOptions;
+    let options = maybeOptions;
+    if (target && !target.isObject3D && !target.isBufferGeometry && typeof target === 'object') {
+      options = { ...target, ...maybeOptions };
+      target = options.mesh || options.object || options.group || options.geometry || null;
+    }
+    if (target && target.isBufferGeometry) {
+      return this.addGeometry({ ...options, geometry: target });
+    }
+    if (!target || !target.isObject3D) {
+      throw new Error('PhotonicScene.addMesh: pass a THREE.Mesh, Group, or Object3D (or a BufferGeometry)');
+    }
+    return this._adoptExternalObject(target, options);
+  }
+
+  // Shared adoption path for addGeometry and addMesh: transforms from options when given, shadow flags on every mesh inside, scene membership, registration.
+  _adoptExternalObject(root, options = {}) {
+    const { position = null, rotation = null, scale = null } = options;
+    if (position) root.position.set(position.x ?? 0, position.y ?? 0, position.z ?? 0);
+    if (rotation) root.rotation.set(rotation.x ?? 0, rotation.y ?? 0, rotation.z ?? 0);
+    if (scale !== null && scale !== undefined) {
+      if (typeof scale === 'number') root.scale.setScalar(scale);
+      else root.scale.set(scale.x ?? 1, scale.y ?? 1, scale.z ?? 1);
+    }
+    if (options.name) {
+      root.name = options.name;
+      root.userData.photonicName = options.name;
+    }
+    root.userData.photonicExternal = true;
+    for (const mesh of this._collectObjectMeshes(root)) {
+      mesh.userData.photonicExternal = true;
+      if (!mesh.geometry.attributes.normal && mesh.geometry.attributes.position) mesh.geometry.computeVertexNormals();
+      if (options.material && mesh.isMesh) mesh.material = options.material;
+      this._applyShadowFlags(mesh, options);
+    }
+    if (root.parent !== this.scene) this.scene.add(root);
+    return this._registerSceneObject(root, options);
+  }
+
   _registerSceneObject(mesh, options = {}) {
     const objectId = this.nextObjectId++;
-    const handle = this._createObjectHandle(mesh, objectId);
+    const handle = this._createObjectHandle(mesh, objectId, options);
     this.objects.set(objectId, { mesh, handle });
 
     if (typeof options.onClick === 'function') {
@@ -913,11 +1018,26 @@ export class PhotonicScene {
   /**
    * Create a handle for manipulating scene objects
    */
-  _createObjectHandle(mesh, objectId) {
+  _createObjectHandle(mesh, objectId, options = {}) {
     const sceneRef = this; // Capture reference to PhotonicScene instance
-    
+    const disposeOnRemove = options.disposeOnRemove !== false;
+    // Every mesh at or under the handled object (a group of external geometry carries several, F10).
+    const allMeshes = () => {
+      const list = [];
+      if (mesh.isMesh) list.push(mesh);
+      if (typeof mesh.traverse === 'function') {
+        mesh.traverse((child) => { if (child !== mesh && child.isMesh) list.push(child); });
+      }
+      return list;
+    };
+
     return {
       id: objectId,
+
+      // The underlying THREE object (a Mesh, or the Group an addMesh call adopted).
+      getMesh() {
+        return mesh;
+      },
       
       // Position methods
       setPosition(x, y, z) {
@@ -961,22 +1081,24 @@ export class PhotonicScene {
         };
       },
       
-      // Color method (for materials that support it)
+      // Color method (for materials that support it; a group recolors every mesh inside it)
       setColor(color) {
-        if (mesh.material && mesh.material.color) {
-          mesh.material.color.setHex(color);
+        for (const target of allMeshes()) {
+          if (target.material && target.material.color) {
+            target.material.color.setHex(color);
+          }
         }
         return this;
       },
-      
-      // Shadow flags (F7)
+
+      // Shadow flags (F7; a group sets them on every mesh inside it)
       setCastShadow(enabled) {
-        mesh.castShadow = enabled;
+        for (const target of allMeshes()) target.castShadow = enabled;
         return this;
       },
 
       setReceiveShadow(enabled) {
-        mesh.receiveShadow = enabled;
+        for (const target of allMeshes()) target.receiveShadow = enabled;
         return this;
       },
 
@@ -1075,16 +1197,24 @@ export class PhotonicScene {
         return this.onClick(null);
       },
       
-      // Remove from scene
+      // Remove from scene (a group removes and, unless disposeOnRemove was false at creation, disposes every mesh inside it)
       remove() {
         sceneRef._clearObjectClickHandler(objectId);
         mesh.parent?.remove(mesh);
-        mesh.geometry?.dispose();
-        if (mesh.material) {
-          if (Array.isArray(mesh.material)) {
-            mesh.material.forEach(m => m.dispose());
-          } else {
-            mesh.material.dispose();
+        sceneRef.objects.delete(objectId);
+        if (!disposeOnRemove) return;
+        const disposables = [mesh];
+        if (typeof mesh.traverse === 'function') {
+          mesh.traverse((child) => { if (child !== mesh) disposables.push(child); });
+        }
+        for (const target of disposables) {
+          target.geometry?.dispose();
+          if (target.material) {
+            if (Array.isArray(target.material)) {
+              target.material.forEach(m => m.dispose());
+            } else {
+              target.material.dispose();
+            }
           }
         }
       }

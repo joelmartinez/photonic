@@ -115,3 +115,26 @@ const splat = await scene.loadSplat({ url: './room.spz' });
 ```
 
 `loadSplat` accepts the Spark-supported formats (.spz, .ply, .splat, .ksplat) and options for the asset's transform and the automatic camera placement. With no direction from the caller, the camera heuristics infer the floor and eye height from the cloud itself, so a captured space opens at standing height facing into the room.
+
+## Adding your own geometry
+
+A scene can take geometry the caller built somewhere else — the case that matters most today is a CAD model produced by another tool, arriving as raw arrays or as ready THREE meshes. Two calls cover both shapes, and both return the same handle the create calls return, with the same transforms, shadow flags, and removal.
+
+```js
+// Raw arrays, in the shape a polygon soup arrives in. Normals and indices are
+// optional; colors carries per-vertex colours when the source has them.
+const part = scene.addGeometry({
+  positions,          // xyz triples (required)
+  normals,            // optional; computed when absent
+  indices,            // optional
+  colors,             // optional per-vertex colours
+  position: { x: 0, y: 0.08, z: 0 }
+});
+
+// Or adopt a mesh — or a whole group — built with THREE directly.
+const handle = scene.addMesh(group, { name: 'model' });
+handle.setCastShadow(true);
+scene.removeObject(handle);
+```
+
+Adopted geometry is a full citizen of the scene: it casts and receives shadows under the same rules as a created object, and `scene.bakeAmbientOcclusion()` covers it exactly like one — it occludes its neighbours, it receives per-vertex darkening (a single solid shades its own recesses, such as a bore), vertex colours it arrived with are darkened rather than replaced, and the ground texture accounts for its footprint. The worked example is `examples/custom-geometry-demo/` in the repo, and the full record is in the repo's `design/F10-F11-EXTERNAL-GEOMETRY.md`.

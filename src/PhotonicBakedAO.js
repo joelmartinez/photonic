@@ -8,7 +8,10 @@
  * The engine's default floor is a single huge plane that cannot be tessellated,
  * so its contact patches are baked into a transparent ground texture instead.
  * Deterministic: the sample directions are a fixed Fibonacci hemisphere, so
- * the same scene bakes to the same occlusion on any machine.
+ * the same scene bakes to the same occlusion on any machine. Externally
+ * supplied geometry (roadmap F11) takes the same path: it occludes, it
+ * receives, a single solid occludes itself, and vertex colours it arrived
+ * with are darkened by the bake rather than replaced.
  */
 
 import * as THREE from 'three';
@@ -23,8 +26,6 @@ export const DEFAULT_BAKED_AO_OPTIONS = {
   groundResolution: 128,
   groundSamples: 12
 };
-
-const PROXY_MATERIAL = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide });
 
 // Fixed hemisphere directions in tangent space (y is the surface normal).
 function hemisphereDirections(count) {
@@ -47,27 +48,172 @@ function tangentBasis(normal) {
   return { tangent, bitangent };
 }
 
-// Occluder stand-ins with the geometry a mesh had before any tessellation, double-sided so wall planes block from either face.
-function buildProxies(meshes) {
-  return meshes.map((mesh) => {
-    if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
-    const proxy = new THREE.Mesh(mesh.geometry, PROXY_MATERIAL);
-    proxy.matrixAutoUpdate = false;
-    proxy.matrix.copy(mesh.matrixWorld);
-    proxy.matrixWorld.copy(mesh.matrixWorld);
-    const sphere = mesh.geometry.boundingSphere.clone().applyMatrix4(mesh.matrixWorld);
-    return { source: mesh, mesh: proxy, sphere };
+// Occluder index over the world-space triangles of every occluder, built once per bake from the geometry as authored (before tessellation). A small BVH keeps a dense externally supplied mesh (F11) in the same cost order as the engine's own low-poly shapes: a ray tests tens of triangles, not every triangle in the model.
+function buildOccluderIndex(meshes) {
+  const vertex = new THREE.Vector3();
+  let triCount = 0;
+  const counts = meshes.map((mesh) => {
+    const geometry = mesh.geometry;
+    const count = Math.floor((geometry.index ? geometry.index.count : geometry.attributes.position.count) / 3);
+    triCount += count;
+    return count;
   });
+  const tris = new Float32Array(triCount * 9);
+  const centroids = new Float32Array(triCount * 3);
+  let tri = 0;
+  meshes.forEach((mesh, meshIndex) => {
+    const geometry = mesh.geometry;
+    const position = geometry.attributes.position;
+    const index = geometry.index;
+    for (let k = 0; k < counts[meshIndex]; k++) {
+      let cx = 0;
+      let cy = 0;
+      let cz = 0;
+      for (let corner = 0; corner < 3; corner++) {
+        const vertexIndex = index ? index.getX(k * 3 + corner) : k * 3 + corner;
+        vertex.fromBufferAttribute(position, vertexIndex).applyMatrix4(mesh.matrixWorld);
+        tris[(tri + k) * 9 + corner * 3] = vertex.x;
+        tris[(tri + k) * 9 + corner * 3 + 1] = vertex.y;
+        tris[(tri + k) * 9 + corner * 3 + 2] = vertex.z;
+        cx += vertex.x;
+        cy += vertex.y;
+        cz += vertex.z;
+      }
+      centroids[(tri + k) * 3] = cx / 3;
+      centroids[(tri + k) * 3 + 1] = cy / 3;
+      centroids[(tri + k) * 3 + 2] = cz / 3;
+    }
+    tri += counts[meshIndex];
+  });
+
+  const order = new Uint32Array(triCount);
+  for (let i = 0; i < triCount; i++) order[i] = i;
+  const nodes = [];
+  const LEAF_SIZE = 8;
+  function build(start, count, depth) {
+    const nodeIndex = nodes.length;
+    const node = { minX: Infinity, minY: Infinity, minZ: Infinity, maxX: -Infinity, maxY: -Infinity, maxZ: -Infinity, left: -1, right: -1, start, count };
+    nodes.push(node);
+    let cMinX = Infinity;
+    let cMinY = Infinity;
+    let cMinZ = Infinity;
+    let cMaxX = -Infinity;
+    let cMaxY = -Infinity;
+    let cMaxZ = -Infinity;
+    for (let i = start; i < start + count; i++) {
+      const t = order[i];
+      for (let corner = 0; corner < 3; corner++) {
+        const x = tris[t * 9 + corner * 3];
+        const y = tris[t * 9 + corner * 3 + 1];
+        const z = tris[t * 9 + corner * 3 + 2];
+        if (x < node.minX) node.minX = x;
+        if (y < node.minY) node.minY = y;
+        if (z < node.minZ) node.minZ = z;
+        if (x > node.maxX) node.maxX = x;
+        if (y > node.maxY) node.maxY = y;
+        if (z > node.maxZ) node.maxZ = z;
+      }
+      const cx = centroids[t * 3];
+      const cy = centroids[t * 3 + 1];
+      const cz = centroids[t * 3 + 2];
+      if (cx < cMinX) cMinX = cx;
+      if (cy < cMinY) cMinY = cy;
+      if (cz < cMinZ) cMinZ = cz;
+      if (cx > cMaxX) cMaxX = cx;
+      if (cy > cMaxY) cMaxY = cy;
+      if (cz > cMaxZ) cMaxZ = cz;
+    }
+    if (count <= LEAF_SIZE || depth >= 24) return nodeIndex;
+    const extentX = cMaxX - cMinX;
+    const extentY = cMaxY - cMinY;
+    const extentZ = cMaxZ - cMinZ;
+    const axis = extentX >= extentY && extentX >= extentZ ? 0 : (extentY >= extentZ ? 1 : 2);
+    if ((axis === 0 ? extentX : axis === 1 ? extentY : extentZ) <= 0) return nodeIndex;
+    const slice = order.subarray(start, start + count);
+    slice.sort((a, b) => centroids[a * 3 + axis] - centroids[b * 3 + axis]);
+    const mid = count >> 1;
+    node.left = build(start, mid, depth + 1);
+    node.right = build(start + mid, count - mid, depth + 1);
+    node.count = 0;
+    return nodeIndex;
+  }
+  if (triCount > 0) build(0, triCount, 0);
+  return { tris, nodes, order, triCount };
 }
 
-// Visibility at one surface point: 1 is fully open, lower is more occluded. A hit counts less the farther away it lands, so near geometry pools deep and distant geometry only shades.
-function sampleVisibility(raycaster, proxies, origin, normal, directions, opts, excludeSource) {
-  const targets = [];
-  for (const proxy of proxies) {
-    if (proxy.source === excludeSource) continue;
-    if (origin.distanceTo(proxy.sphere.center) <= proxy.sphere.radius + opts.radius) targets.push(proxy.mesh);
+// Double-sided Möller–Trumbore test (wall planes block from either face, as the F9 proxy materials did).
+function intersectTriangle(tris, t, ox, oy, oz, dx, dy, dz) {
+  const o = t * 9;
+  const ax = tris[o];
+  const ay = tris[o + 1];
+  const az = tris[o + 2];
+  const e1x = tris[o + 3] - ax;
+  const e1y = tris[o + 4] - ay;
+  const e1z = tris[o + 5] - az;
+  const e2x = tris[o + 6] - ax;
+  const e2y = tris[o + 7] - ay;
+  const e2z = tris[o + 8] - az;
+  const px = dy * e2z - dz * e2y;
+  const py = dz * e2x - dx * e2z;
+  const pz = dx * e2y - dy * e2x;
+  const det = e1x * px + e1y * py + e1z * pz;
+  if (det > -1e-9 && det < 1e-9) return -1;
+  const invDet = 1 / det;
+  const tx = ox - ax;
+  const ty = oy - ay;
+  const tz = oz - az;
+  const u = (tx * px + ty * py + tz * pz) * invDet;
+  if (u < -1e-6 || u > 1 + 1e-6) return -1;
+  const qx = ty * e1z - tz * e1y;
+  const qy = tz * e1x - tx * e1z;
+  const qz = tx * e1y - ty * e1x;
+  const v = (dx * qx + dy * qy + dz * qz) * invDet;
+  if (v < -1e-6 || u + v > 1 + 1e-6) return -1;
+  const distance = (e2x * qx + e2y * qy + e2z * qz) * invDet;
+  return distance > 1e-4 ? distance : -1;
+}
+
+// Nearest hit distance along a ray through the occluder index, or Infinity.
+function raycastIndex(index, origin, direction, maxDistance) {
+  const { tris, nodes, order } = index;
+  if (nodes.length === 0) return Infinity;
+  const ox = origin.x;
+  const oy = origin.y;
+  const oz = origin.z;
+  const dx = direction.x;
+  const dy = direction.y;
+  const dz = direction.z;
+  const invX = 1 / dx;
+  const invY = 1 / dy;
+  const invZ = 1 / dz;
+  let best = maxDistance;
+  const stack = [0];
+  while (stack.length > 0) {
+    const node = nodes[stack.pop()];
+    const tMinX = ((dx < 0 ? node.maxX : node.minX) - ox) * invX;
+    const tMaxX = ((dx < 0 ? node.minX : node.maxX) - ox) * invX;
+    const tMinY = ((dy < 0 ? node.maxY : node.minY) - oy) * invY;
+    const tMaxY = ((dy < 0 ? node.minY : node.maxY) - oy) * invY;
+    const tMinZ = ((dz < 0 ? node.maxZ : node.minZ) - oz) * invZ;
+    const tMaxZ = ((dz < 0 ? node.minZ : node.maxZ) - oz) * invZ;
+    const tNear = Math.max(tMinX, tMinY, tMinZ);
+    const tFar = Math.min(tMaxX, tMaxY, tMaxZ);
+    if (tFar < Math.max(tNear, 0) || tNear > best) continue;
+    if (node.left === -1) {
+      for (let i = node.start; i < node.start + node.count; i++) {
+        const hit = intersectTriangle(tris, order[i], ox, oy, oz, dx, dy, dz);
+        if (hit > 0 && hit < best) best = hit;
+      }
+    } else {
+      stack.push(node.left, node.right);
+    }
   }
-  if (targets.length === 0) return { visibility: 1, rays: 0 };
+  return best;
+}
+
+// Visibility at one surface point: 1 is fully open, lower is more occluded. A hit counts less the farther away it lands, so near geometry pools deep and distant geometry only shades. A mesh occludes itself too (F11): the origin offset along the normal keeps convex surfaces clean, and concave parts of one solid — a bore, a recess — shade themselves the way separate meshes do.
+function sampleVisibility(index, origin, normal, directions, opts) {
+  if (!index || index.triCount === 0) return { visibility: 1, rays: 0 };
   const { tangent, bitangent } = tangentBasis(normal);
   const direction = new THREE.Vector3();
   let blocked = 0;
@@ -77,18 +223,17 @@ function sampleVisibility(raycaster, proxies, origin, normal, directions, opts, 
       .addScaledVector(normal, local.y)
       .addScaledVector(bitangent, local.z)
       .normalize();
-    raycaster.set(origin, direction);
-    raycaster.far = opts.radius;
-    const hits = raycaster.intersectObjects(targets, false);
-    if (hits.length > 0) blocked += 1 - hits[0].distance / opts.radius;
+    const hit = raycastIndex(index, origin, direction, opts.radius);
+    if (hit <= opts.radius) blocked += 1 - hit / opts.radius;
   }
   const visibility = Math.min(1, Math.max(opts.minVisibility, 1 - opts.intensity * (blocked / directions.length)));
   return { visibility, rays: directions.length };
 }
 
-// Subdivide authored planes and boxes so per-vertex occlusion has somewhere to live; spheres and cylinders already carry enough vertices.
+// Subdivide authored planes and boxes so per-vertex occlusion has somewhere to live; spheres and cylinders already carry enough vertices. Geometry carrying its own vertex colours is left alone (F11): it arrives already tessellated, and subdividing would throw its colours away.
 function tessellate(mesh, step) {
   const geometry = mesh.geometry;
+  if (geometry.attributes.color) return;
   const params = geometry.parameters;
   if (!params) return;
   const segments = (size, cap) => Math.max(1, Math.min(cap, Math.round(size / step)));
@@ -113,12 +258,11 @@ function tessellate(mesh, step) {
 export function bakeAmbientOcclusion({ receivers, occluders, floorMesh = null, options = {} }) {
   const opts = { ...DEFAULT_BAKED_AO_OPTIONS, ...options };
   const startedAt = performance.now();
-  const raycaster = new THREE.Raycaster();
   const directions = hemisphereDirections(opts.samples);
   const groundDirections = hemisphereDirections(opts.groundSamples);
 
-  // Proxies first, from the geometry as authored, before tessellation fattens it.
-  const proxies = buildProxies(occluders);
+  // Occluder index first, from the geometry as authored, before tessellation fattens it.
+  const occluderIndex = buildOccluderIndex(occluders);
 
   const bakedMeshes = [];
   let vertices = 0;
@@ -140,25 +284,35 @@ export function bakeAmbientOcclusion({ receivers, occluders, floorMesh = null, o
       mesh.geometry = geometryBefore;
       continue;
     }
-    const record = { mesh, geometry: geometryBefore, material: mesh.material };
+    // Existing vertex colours (externally supplied geometry, F11) are kept and darkened by the visibility; geometry without them gets the plain visibility grey F9 wrote.
+    const sourceColor = geometry.attributes.color || null;
+    const record = {
+      mesh,
+      geometry: geometryBefore,
+      material: mesh.material,
+      sourceColors: sourceColor ? { array: Float32Array.from(sourceColor.array), itemSize: sourceColor.itemSize } : null
+    };
     const normalMatrix = new THREE.Matrix3().getNormalMatrix(mesh.matrixWorld);
-    const colors = new Float32Array(position.count * 3);
+    const colorItemSize = sourceColor ? sourceColor.itemSize : 3;
+    const colors = new Float32Array(position.count * colorItemSize);
 
     for (let i = 0; i < position.count; i++) {
       worldPosition.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld);
       normal.fromBufferAttribute(normalAttribute, i).applyMatrix3(normalMatrix).normalize();
       origin.copy(worldPosition).addScaledVector(normal, 0.02);
-      const { visibility, rays } = sampleVisibility(raycaster, proxies, origin, normal, directions, opts, mesh);
+      const { visibility, rays } = sampleVisibility(occluderIndex, origin, normal, directions, opts);
       raysCast += rays;
-      colors[i * 3] = visibility;
-      colors[i * 3 + 1] = visibility;
-      colors[i * 3 + 2] = visibility;
+      for (let c = 0; c < 3; c++) {
+        const base = sourceColor ? sourceColor.getComponent(i, c) : 1;
+        colors[i * colorItemSize + c] = base * visibility;
+      }
+      if (colorItemSize > 3) colors[i * colorItemSize + 3] = sourceColor.getComponent(i, 3);
       vertices++;
       visibilitySum += visibility;
       if (visibility < visibilityMin) visibilityMin = visibility;
     }
 
-    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, colorItemSize));
     mesh.material = mesh.material.clone();
     mesh.material.vertexColors = true;
     mesh.material.needsUpdate = true;
@@ -183,7 +337,7 @@ export function bakeAmbientOcclusion({ receivers, occluders, floorMesh = null, o
           // Texture row 0 is v=0, which the rotated plane maps to the far (+z) edge.
           const z = centre.z + size / 2 - ((row + 0.5) / res) * size;
           origin.set(x, 0.02, z);
-          const { visibility, rays } = sampleVisibility(raycaster, proxies, origin, up, groundDirections, opts, floorMesh);
+          const { visibility, rays } = sampleVisibility(occluderIndex, origin, up, groundDirections, opts);
           raysCast += rays;
           const alpha = Math.round((1 - visibility) * 255);
           if (alpha > 0) groundTexels++;
@@ -216,6 +370,7 @@ export function bakeAmbientOcclusion({ receivers, occluders, floorMesh = null, o
     stats: {
       vertices,
       raysCast,
+      triangles: occluderIndex.triCount,
       meshes: bakedMeshes.length,
       occluders: occluders.length,
       durationMs: Math.round(durationMs * 10) / 10,
@@ -226,13 +381,18 @@ export function bakeAmbientOcclusion({ receivers, occluders, floorMesh = null, o
   };
 }
 
-// Undo a bake: restore original geometry and material, drop the colour channel and the ground texture mesh.
+// Undo a bake: restore original geometry and material, put back any vertex colours the geometry arrived with (F11), and drop the ground texture mesh.
 export function clearBakedAmbientOcclusion(state) {
   if (!state) return;
   for (const record of state.bakedMeshes) {
     const current = record.mesh.geometry;
-    if (current.attributes.color) current.deleteAttribute('color');
-    if (current !== record.geometry) current.dispose();
+    if (current !== record.geometry) {
+      current.dispose();
+    } else if (record.sourceColors) {
+      current.setAttribute('color', new THREE.BufferAttribute(record.sourceColors.array, record.sourceColors.itemSize));
+    } else if (current.attributes.color) {
+      current.deleteAttribute('color');
+    }
     record.mesh.geometry = record.geometry;
     record.mesh.material.dispose();
     record.mesh.material = record.material;
