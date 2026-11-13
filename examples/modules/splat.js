@@ -294,7 +294,7 @@ async function Load(scene) {
 
 function Update(_scene, _state, _deltaTime) {
   // Camera movement is handled automatically by PhotonicInput.
-  // Spark splat sorting/rendering is handled by SparkRenderer (auto-created).
+  // Spark splat sorting/rendering is handled by the SparkRenderer loadSplat adds to the scene.
 }
 
 function Unload(scene, _state) {

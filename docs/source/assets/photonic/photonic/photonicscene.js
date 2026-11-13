@@ -1399,15 +1399,28 @@ export class PhotonicScene {
     }
 
     // Lazy-load Spark so it is not included in the core viz bundle.
-    let SplatMesh;
+    let SplatMesh, SparkRenderer;
     try {
-      ({ SplatMesh } = await import('@sparkjsdev/spark'));
+      ({ SplatMesh, SparkRenderer } = await import('@sparkjsdev/spark'));
     } catch (err) {
       const msg = `PhotonicScene.loadSplat: failed to load @sparkjsdev/spark – ${err.message}. ` +
         'Ensure @sparkjsdev/spark is installed: it is a declared dependency of @codecube/photonic, so install this package\'s dependencies and try again.';
       console.error(msg, err);
       if (onError) onError(new Error(msg));
       throw new Error(msg);
+    }
+
+    // Spark 2.x does not auto-create its renderer (0.1's SplatMesh did): a scene needs one
+    // SparkRenderer or splats load but never draw. Create it once per scene, reusing any
+    // SparkRenderer the host already added.
+    if (SparkRenderer && !this._sparkRenderer) {
+      this.scene.traverse((obj) => {
+        if (!this._sparkRenderer && obj instanceof SparkRenderer) this._sparkRenderer = obj;
+      });
+      if (!this._sparkRenderer) {
+        this._sparkRenderer = new SparkRenderer({ renderer: this.renderer.renderer });
+        this.scene.add(this._sparkRenderer);
+      }
     }
 
     // Create the Spark SplatMesh (a THREE.Object3D subclass).
@@ -1491,6 +1504,12 @@ export class PhotonicScene {
     if (this._isWatchingClicks) {
       this.renderer.renderer.domElement.removeEventListener('click', this._onSceneClick);
       this._isWatchingClicks = false;
+    }
+    // Dispose the scene's SparkRenderer, if loadSplat created or adopted one.
+    if (this._sparkRenderer) {
+      if (this._sparkRenderer.parent) this._sparkRenderer.parent.remove(this._sparkRenderer);
+      if (typeof this._sparkRenderer.dispose === 'function') this._sparkRenderer.dispose();
+      this._sparkRenderer = null;
     }
     this.renderer.dispose();
     this.camera.dispose();

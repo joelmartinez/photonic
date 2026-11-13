@@ -64,7 +64,7 @@ export class PhotonicRenderer {
 
     // Enable shadows for better visual quality
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
 
     // Grading (F8): ACES filmic tone mapping by default, exposure is a plain control.
     this.renderer.toneMapping = resolveToneMapping(options.toneMapping ?? 'aces');

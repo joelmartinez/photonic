@@ -4,6 +4,14 @@ All notable changes to Photonic are recorded in this file. The format follows Ke
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-13
+
+### Changed
+
+- The engine moves to three 0.187.0 and Spark 2.4.0 (the Dependency Currency roll, 2026-11-13): the three peer requirement is now ^0.187.0, so a consumer on an older three moves with it — that is this minor version's breaking note. Spark moves from ^0.1.10 to ^2.4.0, and the docs site's vendored copies of three and its addons move to 0.187.0 with it.
+- `scene.loadSplat()` now creates the scene's SparkRenderer itself, or adopts one the host already added: Spark 2 no longer creates it automatically (0.1's SplatMesh did), and without one splats loaded but never drew. `scene.dispose()` removes and disposes that renderer with the rest of the scene.
+- The default shadow map type is PCFShadowMap, named honestly: three 0.187 removed the soft shadow shader path and silently substituted this type for the old PCFSoftShadowMap setting, so the renderer now asks for what it gets. Shadows read marginally crisper than before.
+
 ## [0.3.0] - 2026-11-13
 
 ### Added

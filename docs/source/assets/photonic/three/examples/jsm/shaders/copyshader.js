@@ -1,7 +1,14 @@
 /**
- * Full-screen textured quad shader
+ * @module CopyShader
+ * @three_import import { CopyShader } from 'three/addons/shaders/copyshader.js';
  */
 
+/**
+ * Full-screen copy shader pass.
+ *
+ * @constant
+ * @type {ShaderMaterial~Shader}
+ */
 const CopyShader = {
 
 	name: 'CopyShader',
