@@ -1,6 +1,6 @@
 {
   "name": "@codecube/photonic",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": false,
   "description": "Photonic \u2014 browser-native 3D/WebXR scene engine extracted from codecube.net. MIT licensed. npm publishing happens only on the owner's word.",
   "keywords": [
@@ -60,6 +60,7 @@
     "design/F10-F11-EXTERNAL-GEOMETRY.md",
     "design/F12-PHYSICAL-ENVIRONMENT.md",
     "design/F13-MODEL-LOADING.md",
+    "design/F14-MODEL-FORMATS.md",
     "design/OVERLAY.md",
     "design/SKELETON-3D.md",
     "design/VIRTUAL-CAMERA.md",

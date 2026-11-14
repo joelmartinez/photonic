@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Photonic - load a model file demo (F13)</title>
+<title>Photonic - load a model file demo (F13/F14)</title>
 <style>
   html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; background: #14120f; color: #e5e7eb; }
   header { display: flex; gap: 16px; align-items: center; padding: 10px 14px; flex-wrap: wrap; }
@@ -26,12 +26,12 @@
 </head>
 <body>
 <header>
-  <strong>Photonic model loading (F13)</strong>
+  <strong>Photonic model loading (F13/F14)</strong>
   <label><input type="checkbox" id="toggle-bake"> Baked ambient occlusion</label>
   <span id="status" style="font-size: 14px;">Loading the model file...</span>
 </header>
 <div id="app"></div>
-<p class="note">The machined reference part on the plinth is an existing model file — assets/reference-part.glb, a binary glTF with a plate, a boss, and a knob in a hierarchy, three materials, and one animation — fetched and parsed by scene.loadModel and adopted into the scene with the standard handle, so it takes transforms, shadow flags, removal, and the baked occlusion pass like anything the creators build. Drag to orbit.</p>
+<p class="note">Every model on the plinth is an existing file fetched and parsed by the same call, scene.loadModel, and adopted into the scene with the standard handle, so each takes transforms, shadow flags, removal, and the baked occlusion pass like anything the creators build: the machined reference part (assets/reference-part.glb, a binary glTF with a plate, a boss, and a knob in a hierarchy, three materials, and one animation), a bracket and a wedge in binary and ASCII STL (assets/bracket.stl, assets/wedge.stl — geometry only, so both wear the engine's default material), and a knob in OBJ (assets/knob.obj) whose two groups take their colours from its material file, assets/knob.mtl. Drag to orbit.</p>
 <script type="module" src="./model-loader-demo.js"></script>
 </body>
 </html>

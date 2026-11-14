@@ -160,7 +160,7 @@ The worked example is `examples/physical-materials-demo/` in the repo, and the f
 
 ## Loading a model file
 
-A model that already exists as a file loads with one call. The first format is glTF/GLB, the web standard, which carries hierarchy and materials; the parsed model is adopted through the same registration as everything else, so the handle is the standard one — transforms, shadow flags, removal, and the baked occlusion included.
+A model that already exists as a file loads with one call. Three format families load through it: glTF/GLB, the web standard, which carries hierarchy and materials; STL in both its binary and ASCII encodings; and OBJ with its MTL material file. The format is read from an explicit `format` option, the URL's extension, or the data's own content, and the parsed model is adopted through the same registration as everything else, so the handle is the standard one — transforms, shadow flags, removal, and the baked occlusion included.
 
 ```js
 const part = await scene.loadModel('./reference-part.glb', {
@@ -170,6 +170,15 @@ const part = await scene.loadModel('./reference-part.glb', {
 part.getModelInfo(); // { format: 'glb', url, animations, cameras, asset, meshCount }
 part.setRotation(0, Math.PI / 4, 0);
 scene.bakeAmbientOcclusion(); // covers the loaded model like a created object
+
+// STL carries no materials and no hierarchy, so it arrives in the engine's
+// default material; colour and finish options steer that default.
+const bracket = await scene.loadModel('./bracket.stl', { color: 0xb8bcc2, roughness: 0.65 });
+
+// An OBJ model's groups arrive wearing their MTL materials, resolved from
+// the file's own material-library lines against its folder.
+const knob = await scene.loadModel('./knob.obj');
+knob.getModelInfo(); // { format: 'obj', url, meshCount, materialLibraries: ['knob.mtl'], ... }
 ```
 
-The options-bag and raw-bytes forms (`scene.loadModel({ url })`, `scene.loadModel({ data })` for an ArrayBuffer or Blob) work the same way, and the exported `loadGLTFModel` helper returns the parser's raw result for callers who manage their own adoption. Animations are carried and reported through getModelInfo, not played; drive a THREE.AnimationMixer over the handle's mesh to play one. The worked example is `examples/model-loader-demo/` in the repo, and the full record is in the repo's `design/F13-MODEL-LOADING.md`.
+The options-bag and raw-bytes forms (`scene.loadModel({ url })`, `scene.loadModel({ data })` for an ArrayBuffer or Blob) work the same way, and the exported `loadGLTFModel`, `loadSTLModel`, and `loadOBJModel` helpers return a parser's raw result for callers who manage their own adoption. Animations are carried and reported through getModelInfo, not played; drive a THREE.AnimationMixer over the handle's mesh to play one. The worked example is `examples/model-loader-demo/` in the repo — a glTF reference part, a binary and an ASCII STL, and an OBJ knob with its material file on one plinth — and the full records are in the repo's `design/F13-MODEL-LOADING.md` and `design/F14-MODEL-FORMATS.md`.

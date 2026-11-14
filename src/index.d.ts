@@ -144,12 +144,22 @@ export interface AddMeshOptions {
   [key: string]: unknown;
 }
 
+export type ModelFormat = 'gltf' | 'glb' | 'stl' | 'obj';
+
 export interface LoadModelOptions {
   url?: string;
   data?: ArrayBuffer | string | Blob;
   buffer?: ArrayBuffer | string | Blob;
+  format?: ModelFormat | 'auto';
   resourcePath?: string;
   dracoDecoderPath?: string;
+  mtlUrl?: string;
+  materialsUrl?: string;
+  mtlData?: string | ArrayBuffer | Blob;
+  loadMaterials?: boolean;
+  color?: ColorValue;
+  roughness?: number;
+  metalness?: number;
   material?: unknown;
   physical?: boolean;
   materialType?: 'standard' | 'physical';
@@ -171,12 +181,14 @@ export interface LoadModelOptions {
 }
 
 export interface LoadedModelInfo {
-  format: 'gltf' | 'glb';
+  format: ModelFormat;
   url: string | null;
   animations: unknown[];
   cameras: unknown[];
   asset: Record<string, unknown> | null;
   meshCount: number;
+  materialLibraries?: string[];
+  hasColors?: boolean;
 }
 
 export interface ModelObjectHandle extends SceneObjectHandle {
@@ -186,6 +198,29 @@ export interface ModelObjectHandle extends SceneObjectHandle {
 
 export interface GLTFLoadResult {
   scene: unknown;
+  animations: unknown[];
+  cameras: unknown[];
+  asset: Record<string, unknown> | null;
+}
+
+export interface STLLoadResult {
+  scene: unknown;
+  geometry: unknown;
+  format: 'stl';
+  url: string | null;
+  meshCount: number;
+  hasColors: boolean;
+  animations: unknown[];
+  cameras: unknown[];
+  asset: Record<string, unknown> | null;
+}
+
+export interface OBJLoadResult {
+  scene: unknown;
+  format: 'obj';
+  url: string | null;
+  meshCount: number;
+  materialLibraries: string[];
   animations: unknown[];
   cameras: unknown[];
   asset: Record<string, unknown> | null;
@@ -360,6 +395,7 @@ export declare class PhotonicScene {
   loadModel(url: string, options?: LoadModelOptions): Promise<ModelObjectHandle>;
   loadModel(options: LoadModelOptions & { url: string }): Promise<ModelObjectHandle>;
   loadModel(options: LoadModelOptions & { data: ArrayBuffer | string | Blob }): Promise<ModelObjectHandle>;
+  loadModel(data: ArrayBuffer | Blob, options?: LoadModelOptions): Promise<ModelObjectHandle>;
   createArrow(options?: { origin?: Partial<Vector3Like>; direction?: Partial<Vector3Like>; length?: number; color?: ColorValue; headLength?: number; headWidth?: number }): SceneObjectHandle;
   setGridVisible(visible: boolean): void;
   setFloorVisible(visible: boolean): void;
@@ -794,9 +830,11 @@ export declare function captureOverlayStream(overlay: PhotonicOverlay, options?:
 
 export declare function createStudioEnvironment(renderer: unknown, options?: { sigma?: number }): { texture: unknown; dispose(): void };
 
-// Model loading (F13)
+// Model loading (F13, STL/OBJ added by F14)
 
 export declare function loadGLTFModel(source: string | LoadModelOptions | ArrayBuffer | Blob, options?: LoadModelOptions): Promise<GLTFLoadResult>;
+export declare function loadSTLModel(source: string | LoadModelOptions | ArrayBuffer | Blob, options?: LoadModelOptions): Promise<STLLoadResult>;
+export declare function loadOBJModel(source: string | LoadModelOptions | ArrayBuffer | Blob, options?: LoadModelOptions): Promise<OBJLoadResult>;
 
 // Splat heuristics and XR pose math
 

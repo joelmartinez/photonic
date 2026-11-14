@@ -4,6 +4,12 @@ All notable changes to Photonic are recorded in this file. The format follows Ke
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-14
+
+### Added
+
+- Model loading grows to STL and OBJ (roadmap F14, the follow-on F13 named): the same `scene.loadModel` entry point now loads .stl files (binary and ASCII, through Three's STLLoader) and .obj files (through Three's OBJLoader, with the MTL material file the format carries), each lazy-loaded the way the GLTF loader is, and adopts the result through the same registration the creators, addMesh, and the glTF path use, so an STL or OBJ model gets the standard handle — transforms, materials, shadow flags under the creators' rule, removal, and the baked occlusion — with no second-class path. The format is chosen from an explicit `format` option, the URL's extension, or the data's own content, and rides on the handle through `getModelInfo()` named honestly per file (STL and OBJ report empty animations and cameras rather than invented ones; OBJ also reports its material libraries, STL its vertex-colour flag). STL carries no materials and no hierarchy, so it arrives as a single mesh wearing the engine's default material treatment (the addGeometry default; per-vertex colours honoured when a binary file carries them), steerable with color, roughness, and metalness load options and composable with the material override and the F12 physical upgrade; OBJ groups arrive as named meshes wearing their MTL materials, resolved from the file's mtllib lines against its folder or resourcePath, or supplied through `mtlUrl` or `mtlData`, with `loadMaterials: false` as the opt-out. The raw parser helpers are exported as `loadSTLModel` and `loadOBJModel` beside `loadGLTFModel`. Design and verification in design/F14-MODEL-FORMATS.md, runnable proof in examples/model-loader-demo/ (extended to carry a binary STL bracket, an ASCII STL wedge, and an OBJ knob with its MTL file beside the glTF reference part).
+
 ## [0.5.0] - 2026-11-14
 
 ### Added

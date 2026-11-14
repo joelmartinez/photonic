@@ -14,7 +14,7 @@ import { PhotonicXRManager } from './PhotonicXRManager.js';
 import { PhotonicControlSystem } from './PhotonicControlSystem.js';
 import { bakeAmbientOcclusion as bakeOcclusion, clearBakedAmbientOcclusion as clearOcclusion } from './PhotonicBakedAO.js';
 import { createStudioEnvironment } from './PhotonicEnvironment.js';
-import { loadGLTFModel, resolveModelSource, modelFormatFor } from './PhotonicModelLoader.js';
+import { loadGLTFModel, loadSTLModel, loadOBJModel, resolveModelSource, modelFormatFor } from './PhotonicModelLoader.js';
 
 export class PhotonicScene {
   constructor(containerElement, options = {}) {
@@ -1081,7 +1081,7 @@ export class PhotonicScene {
 
   // ==================== Model loading (F13) ====================
 
-  // Load an existing model file into the scene (roadmap F13). First format: glTF/GLB, which carries hierarchy and materials. Call as loadModel(url, options), loadModel({ url, ...options }), or with raw model bytes as loadModel({ data }) / loadModel(arrayBuffer). The parsed model is adopted through the same registration the creators and addMesh use, so the returned handle is the standard one — transforms, materials, shadow flags under the creators' rule, removal, and the F11 bake — with the parse result riding on it as getModelInfo() (format, animations, cameras, asset metadata, mesh count). Adoption options are addMesh's: position, rotation, scale, name, castShadow, receiveShadow, a material override, the F12 physical upgrade options, disposeOnRemove, and onClick; loading options are resourcePath (for a .gltf file's external resources), dracoDecoderPath, onProgress, onLoad(handle, info), and onError.
+  // Load an existing model file into the scene (roadmap F13, extended by F14). Formats: glTF/GLB, which carries hierarchy and materials; STL, binary and ASCII, which carries geometry only and so arrives wearing the engine's default material; and OBJ, whose groups and MTL materials map across as far as the format allows. The format is read from an explicit format option, the URL's extension, or the data's own content. Call as loadModel(url, options), loadModel({ url, ...options }), or with raw model bytes as loadModel({ data }) / loadModel(arrayBuffer). The parsed model is adopted through the same registration the creators and addMesh use, so the returned handle is the standard one — transforms, materials, shadow flags under the creators' rule, removal, and the F11 bake — with the parse result riding on it as getModelInfo() (format, animations, cameras, asset metadata, mesh count). Adoption options are addMesh's: position, rotation, scale, name, castShadow, receiveShadow, a material override, the F12 physical upgrade options, disposeOnRemove, and onClick; loading options are resourcePath (for a .gltf file's external resources and an .obj file's material file), dracoDecoderPath (glTF only), format, mtlUrl and mtlData (OBJ only), color, roughness, and metalness (the STL default material only), onProgress, onLoad(handle, info), and onError.
   async loadModel(source, options = {}) {
     let opts = options;
     if (source && typeof source === 'object' && !(source instanceof ArrayBuffer) && !(typeof Blob !== 'undefined' && source instanceof Blob)) {
@@ -1093,31 +1093,42 @@ export class PhotonicScene {
       if (typeof opts.onError === 'function') opts.onError(err);
       throw err;
     }
-    let gltf;
+    // A Blob's bytes are read once here: the format sniff needs them, and the helpers then parse the buffer instead of reading the Blob again.
+    let loadOpts = opts;
+    let sniffData = data;
+    if (typeof Blob !== 'undefined' && data instanceof Blob) {
+      try {
+        const bytes = await data.arrayBuffer();
+        sniffData = bytes;
+        loadOpts = { ...opts, data: bytes };
+      } catch { sniffData = null; }
+    }
+    const format = modelFormatFor(url, sniffData, opts.format);
+    let parsed;
     try {
-      gltf = await loadGLTFModel(source, opts);
+      if (format === 'stl') parsed = await loadSTLModel(source, loadOpts);
+      else if (format === 'obj') parsed = await loadOBJModel(source, loadOpts);
+      else parsed = await loadGLTFModel(source, loadOpts);
     } catch (err) {
       if (typeof opts.onError === 'function') opts.onError(err);
       throw err;
     }
-    if (!gltf || !gltf.scene) {
+    if (!parsed || !parsed.scene) {
       const err = new Error(`PhotonicScene.loadModel: the model from "${url || 'model data'}" parsed without a scene`);
       if (typeof opts.onError === 'function') opts.onError(err);
       throw err;
     }
-    const handle = this._adoptExternalObject(gltf.scene, opts);
-    let formatBytes = data instanceof ArrayBuffer ? data : null;
-    if (!formatBytes && typeof Blob !== 'undefined' && data instanceof Blob) {
-      try { formatBytes = await data.arrayBuffer(); } catch { formatBytes = null; }
-    }
+    const handle = this._adoptExternalObject(parsed.scene, opts);
     const info = {
-      format: modelFormatFor(url, formatBytes),
+      format,
       url: url || null,
-      animations: gltf.animations || [],
-      cameras: gltf.cameras || [],
-      asset: gltf.asset || null,
-      meshCount: this._collectObjectMeshes(gltf.scene).length
+      animations: parsed.animations || [],
+      cameras: parsed.cameras || [],
+      asset: parsed.asset || null,
+      meshCount: this._collectObjectMeshes(parsed.scene).length
     };
+    if (format === 'obj') info.materialLibraries = parsed.materialLibraries || [];
+    if (format === 'stl') info.hasColors = Boolean(parsed.hasColors);
     handle.getModelInfo = () => info;
     handle.modelInfo = info;
     if (typeof opts.onLoad === 'function') opts.onLoad(handle, info);

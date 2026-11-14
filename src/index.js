@@ -16,6 +16,6 @@ export { PhotonicOverlay, createPoseOverlay, normalizePose, deviationColorHex, D
 export { PhotonicSkeleton, createSkeleton, normalizeSkeletonPose, DEFAULT_SKELETON_STYLE } from './PhotonicSkeleton.js';
 export { PhotonicVirtualCamera, createVirtualCamera, captureSceneStream, captureOverlayStream, VIRTUAL_CAMERA_KIND } from './PhotonicVirtualCamera.js';
 export { createStudioEnvironment } from './PhotonicEnvironment.js';
-export { loadGLTFModel } from './PhotonicModelLoader.js';
+export { loadGLTFModel, loadSTLModel, loadOBJModel } from './PhotonicModelLoader.js';
 export { estimateSplatCamera } from './splatCameraHeuristics.js';
 export { solveOriginPoseForViewerPose, composeViewerWorldPose, createPose } from './xrPoseMath.js';
