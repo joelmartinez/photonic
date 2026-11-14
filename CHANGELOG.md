@@ -4,6 +4,14 @@ All notable changes to Photonic are recorded in this file. The format follows Ke
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-14
+
+### Added
+
+- Load an existing model file into a scene (roadmap F13, requested by HootCAD): `scene.loadModel(url, options)` fetches and parses a model file and adopts the result through the same registration the creators and addMesh use, so the returned standard handle carries transforms, the file's hierarchy and materials, shadow flags under the creators' rule, removal, and the baked occlusion, with no second-class path. First format is glTF/GLB (the binary and JSON forms, plus a raw-bytes form for callers who already hold the file), parsed by Three's GLTFLoader lazy-loaded on first use; STL and OBJ are named follow-on candidates. Adoption options are addMesh's whole set plus the F12 physical upgrade options; loading options include resourcePath, dracoDecoderPath, onProgress, onLoad, and onError; and the parse result rides on the handle through getModelInfo() (format, source URL, animations, cameras, asset metadata, mesh count) — animations are carried and reported, not played. The raw parser helper is exported as `loadGLTFModel`. Design and verification in design/F13-MODEL-LOADING.md, runnable proof in examples/model-loader-demo/.
+- Physical materials with clearcoat on every material path (roadmap F12, requested by HootCAD): `scene.createMaterial` takes `type: 'physical'` (and upgrades a standard request that carries a clearcoat value) and returns a MeshPhysicalMaterial with clearcoat and clearcoat roughness set, `scene.addGeometry` builds its default material as a physical one when the call asks for it, and `scene.addMesh` gives an adopted mesh's own material the physical surface — colour, roughness, metalness, and maps copied — when the adoption options ask for it and supply no material of their own. A physical request with no clearcoat value defaults the coat to fully on at roughness 0.12; `clearcoat: 0` opts out. Design and verification in design/F12-PHYSICAL-ENVIRONMENT.md, runnable proof in examples/physical-materials-demo/.
+- An image-based studio environment (roadmap F12, requested by HootCAD): `scene.setStudioEnvironment({ intensity, background })` builds a neutral studio environment from Three's RoomEnvironment through PMREM and applies it as scene.environment, so metals and clearcoat are lit by more than the direct lights; `scene.setEnvironment(texture, options)` adopts a caller-supplied environment texture, `scene.setEnvironmentIntensity` and `scene.getEnvironmentIntensity` drive the scene-wide environment strength, `scene.getEnvironmentInfo()` reports the state, and `scene.clearEnvironment()` removes it (also at construction, with the `environment` scene option). The PMREM builder is exported as `createStudioEnvironment` for callers who manage their own scene.environment.
+
 ## [0.4.0] - 2026-11-13
 
 ### Changed

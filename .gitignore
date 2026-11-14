@@ -3,3 +3,6 @@ dist/
 docsout/
 *.log
 *.tgz
+
+# Muse snapshot-sync bookkeeping — local only, never committed or pushed
+.muse-github-snapshot-sync.json

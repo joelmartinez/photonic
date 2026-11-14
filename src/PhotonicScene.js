@@ -13,6 +13,8 @@ import { PhotonicInput } from './PhotonicInput.js';
 import { PhotonicXRManager } from './PhotonicXRManager.js';
 import { PhotonicControlSystem } from './PhotonicControlSystem.js';
 import { bakeAmbientOcclusion as bakeOcclusion, clearBakedAmbientOcclusion as clearOcclusion } from './PhotonicBakedAO.js';
+import { createStudioEnvironment } from './PhotonicEnvironment.js';
+import { loadGLTFModel, resolveModelSource, modelFormatFor } from './PhotonicModelLoader.js';
 
 export class PhotonicScene {
   constructor(containerElement, options = {}) {
@@ -42,6 +44,10 @@ export class PhotonicScene {
     
     // Baked ambient occlusion state (F9), set by bakeAmbientOcclusion
     this._bakedAO = null;
+
+    // Image-based environment state (F12), set by setStudioEnvironment / setEnvironment
+    this._environment = null;
+    this._environmentIntensity = 1;
 
     // Track created objects
     this.objects = new Map();
@@ -83,6 +89,11 @@ export class PhotonicScene {
     // Optional composer chain from construction options (F8)
     if (options.postProcessing) {
       this.enablePostProcessing(options.postProcessing === true ? {} : options.postProcessing);
+    }
+
+    // Optional studio environment from construction options (F12)
+    if (options.environment) {
+      this.setStudioEnvironment(options.environment === true ? {} : options.environment);
     }
 
     // Start the shared render loop used by standard rendering and WebXR.
@@ -410,6 +421,60 @@ export class PhotonicScene {
     };
   }
 
+  // ==================== Image-based environment (F12) ====================
+
+  // Apply the neutral studio environment (Three's RoomEnvironment through PMREM) as scene.environment, so metals and clearcoat read under image-based light as well as the direct lights. Options: intensity (default 1), background (also show the environment as the scene background, default false).
+  setStudioEnvironment(options = {}) {
+    const built = createStudioEnvironment(this.renderer.renderer, options);
+    this._setEnvironmentTexture(built.texture, 'studio', options, () => built.dispose());
+    return this;
+  }
+
+  // Adopt a caller-supplied environment texture (for example their own PMREM or HDR result). Options: intensity (default 1), background (default false). The scene does not dispose a caller texture on clear; the caller keeps ownership.
+  setEnvironment(texture, options = {}) {
+    if (!texture) throw new Error('PhotonicScene.setEnvironment: pass an environment texture');
+    this._setEnvironmentTexture(texture, 'custom', options, null);
+    return this;
+  }
+
+  _setEnvironmentTexture(texture, source, options, disposeOwned) {
+    this.clearEnvironment();
+    this.scene.environment = texture;
+    this._environment = { texture, source, disposeOwned };
+    this._environmentIntensity = options.intensity ?? 1;
+    this.scene.environmentIntensity = this._environmentIntensity;
+    if (options.background) this.scene.background = texture;
+  }
+
+  // Environment light strength (scene.environmentIntensity). Applies to the studio and custom environments alike.
+  setEnvironmentIntensity(intensity) {
+    this._environmentIntensity = intensity;
+    if (this._environment) this.scene.environmentIntensity = intensity;
+    return this;
+  }
+
+  getEnvironmentIntensity() {
+    return this._environmentIntensity;
+  }
+
+  // Remove the environment and free the studio texture the scene built. A background the environment supplied goes with it.
+  clearEnvironment() {
+    if (!this._environment) return this;
+    if (this.scene.background === this._environment.texture) this.scene.background = new THREE.Color(0x6495ed);
+    if (this.scene.environment === this._environment.texture) this.scene.environment = null;
+    this._environment.disposeOwned?.();
+    this._environment = null;
+    return this;
+  }
+
+  getEnvironmentInfo() {
+    return {
+      enabled: this._environment !== null,
+      source: this._environment ? this._environment.source : null,
+      intensity: this._environmentIntensity
+    };
+  }
+
   /**
    * Create a point light
    * @param {Object} options - Light configuration
@@ -529,6 +594,57 @@ export class PhotonicScene {
    * @param {Object} options - Material configuration
    * @returns {THREE.Material} The created material
    */
+  // Whether an options bag asks for a physical material (F12): an explicit physical type or flag, or any clearcoat value, which only MeshPhysicalMaterial carries.
+  _wantsPhysicalMaterial(options = {}) {
+    return options.type === 'physical' || options.materialType === 'physical' || options.physical === true ||
+      options.clearcoat !== undefined || options.clearcoatRoughness !== undefined;
+  }
+
+  // Build a MeshPhysicalMaterial from the shared option shape (F12). When no clearcoat value is given the coat defaults to fully on at roughness 0.12: asking for physical in Photonic means asking for the clearcoat look, and clearcoat: 0 opts out.
+  _buildPhysicalMaterial(params, options = {}) {
+    return new THREE.MeshPhysicalMaterial({
+      ...params,
+      clearcoat: options.clearcoat ?? 1,
+      clearcoatRoughness: options.clearcoatRoughness ?? 0.12,
+      ...(options.clearcoatMap ? { clearcoatMap: options.clearcoatMap } : {}),
+      ...(options.clearcoatRoughnessMap ? { clearcoatRoughnessMap: options.clearcoatRoughnessMap } : {}),
+      ...(options.clearcoatNormalMap ? { clearcoatNormalMap: options.clearcoatNormalMap } : {})
+    });
+  }
+
+  // Give a material the physical clearcoat surface (F12): a physical material is tuned in place; any other material is replaced by a physical one that copies its colour, roughness, metalness, maps, and flags, with the replaced material left undisposed for its owner.
+  _applyPhysicalMaterial(material, options = {}) {
+    if (Array.isArray(material)) return material.map((entry) => this._applyPhysicalMaterial(entry, options));
+    if (!material) return material;
+    if (material.isMeshPhysicalMaterial) {
+      material.clearcoat = options.clearcoat ?? 1;
+      material.clearcoatRoughness = options.clearcoatRoughness ?? 0.12;
+      if (options.envMapIntensity !== undefined) material.envMapIntensity = options.envMapIntensity;
+      material.needsUpdate = true;
+      return material;
+    }
+    const physical = new THREE.MeshPhysicalMaterial({
+      color: material.color ? material.color.clone() : 0xffffff,
+      roughness: material.roughness ?? 0.5,
+      metalness: material.metalness ?? 0,
+      emissive: material.emissive ? material.emissive.clone() : 0x000000,
+      emissiveIntensity: material.emissiveIntensity ?? 1,
+      opacity: material.opacity ?? 1,
+      transparent: material.transparent ?? false,
+      side: material.side ?? THREE.FrontSide,
+      wireframe: material.wireframe ?? false,
+      vertexColors: material.vertexColors ?? false,
+      envMapIntensity: options.envMapIntensity ?? material.envMapIntensity ?? 1,
+      clearcoat: options.clearcoat ?? 1,
+      clearcoatRoughness: options.clearcoatRoughness ?? 0.12
+    });
+    for (const key of ['map', 'normalMap', 'emissiveMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'envMap']) {
+      if (material[key]) physical[key] = material[key];
+    }
+    if (material.normalScale && physical.normalScale) physical.normalScale.copy(material.normalScale);
+    return physical;
+  }
+
   createMaterial(options = {}) {
     const {
       type = 'standard',
@@ -589,8 +705,45 @@ export class PhotonicScene {
         });
         break;
         
+      case 'physical':
+        // Physical material with clearcoat (F12); requesting clearcoat on the standard path lands here too, handled below.
+        material = this._buildPhysicalMaterial({
+          color,
+          emissive,
+          emissiveIntensity,
+          roughness,
+          metalness,
+          opacity,
+          transparent,
+          side: sideValue,
+          wireframe,
+          map,
+          normalMap,
+          emissiveMap,
+          ...(options.envMapIntensity !== undefined ? { envMapIntensity: options.envMapIntensity } : {})
+        }, options);
+        break;
+
       case 'standard':
       default:
+        if (this._wantsPhysicalMaterial(options)) {
+          material = this._buildPhysicalMaterial({
+            color,
+            emissive,
+            emissiveIntensity,
+            roughness,
+            metalness,
+            opacity,
+            transparent,
+            side: sideValue,
+            wireframe,
+            map,
+            normalMap,
+            emissiveMap,
+            ...(options.envMapIntensity !== undefined ? { envMapIntensity: options.envMapIntensity } : {})
+          }, options);
+          break;
+        }
         material = new THREE.MeshStandardMaterial({
           color,
           emissive,
@@ -603,11 +756,12 @@ export class PhotonicScene {
           wireframe,
           map,
           normalMap,
-          emissiveMap
+          emissiveMap,
+          ...(options.envMapIntensity !== undefined ? { envMapIntensity: options.envMapIntensity } : {})
         });
         break;
     }
-    
+
     return material;
   }
   
@@ -858,15 +1012,20 @@ export class PhotonicScene {
 
     if (!geometry.attributes.normal && geometry.attributes.position) geometry.computeVertexNormals();
     const hasVertexColors = Boolean(geometry.attributes.color);
-    const mat = options.material || new THREE.MeshStandardMaterial({
+    // Default material: standard, or physical with clearcoat when the call asks for it (F12).
+    const defaultParams = {
       color: options.color !== undefined ? options.color : (hasVertexColors ? 0xffffff : 0xb8bcc2),
       roughness: options.roughness ?? 0.65,
       metalness: options.metalness ?? 0.15,
       transparent: options.transparent ?? false,
       opacity: options.opacity ?? 1,
       vertexColors: hasVertexColors,
-      side: options.doubleSided ? THREE.DoubleSide : THREE.FrontSide
-    });
+      side: options.doubleSided ? THREE.DoubleSide : THREE.FrontSide,
+      ...(options.envMapIntensity !== undefined ? { envMapIntensity: options.envMapIntensity } : {})
+    };
+    const mat = options.material || (this._wantsPhysicalMaterial(options)
+      ? this._buildPhysicalMaterial(defaultParams, options)
+      : new THREE.MeshStandardMaterial(defaultParams));
     if (hasVertexColors && mat.vertexColors !== true && options.material) {
       mat.vertexColors = true;
       mat.needsUpdate = true;
@@ -907,14 +1066,62 @@ export class PhotonicScene {
       root.userData.photonicName = options.name;
     }
     root.userData.photonicExternal = true;
+    // A physical request on adoption (F12) upgrades every adopted mesh's material to physical, unless the call supplies its own material, which is honoured as-is.
+    const upgradePhysical = !options.material && this._wantsPhysicalMaterial(options);
     for (const mesh of this._collectObjectMeshes(root)) {
       mesh.userData.photonicExternal = true;
       if (!mesh.geometry.attributes.normal && mesh.geometry.attributes.position) mesh.geometry.computeVertexNormals();
       if (options.material && mesh.isMesh) mesh.material = options.material;
+      else if (upgradePhysical && mesh.isMesh) mesh.material = this._applyPhysicalMaterial(mesh.material, options);
       this._applyShadowFlags(mesh, options);
     }
     if (root.parent !== this.scene) this.scene.add(root);
     return this._registerSceneObject(root, options);
+  }
+
+  // ==================== Model loading (F13) ====================
+
+  // Load an existing model file into the scene (roadmap F13). First format: glTF/GLB, which carries hierarchy and materials. Call as loadModel(url, options), loadModel({ url, ...options }), or with raw model bytes as loadModel({ data }) / loadModel(arrayBuffer). The parsed model is adopted through the same registration the creators and addMesh use, so the returned handle is the standard one — transforms, materials, shadow flags under the creators' rule, removal, and the F11 bake — with the parse result riding on it as getModelInfo() (format, animations, cameras, asset metadata, mesh count). Adoption options are addMesh's: position, rotation, scale, name, castShadow, receiveShadow, a material override, the F12 physical upgrade options, disposeOnRemove, and onClick; loading options are resourcePath (for a .gltf file's external resources), dracoDecoderPath, onProgress, onLoad(handle, info), and onError.
+  async loadModel(source, options = {}) {
+    let opts = options;
+    if (source && typeof source === 'object' && !(source instanceof ArrayBuffer) && !(typeof Blob !== 'undefined' && source instanceof Blob)) {
+      opts = { ...source, ...options };
+    }
+    const { url, data } = resolveModelSource(source, opts);
+    if (!url && data === null) {
+      const err = new Error('PhotonicScene.loadModel: pass a model URL, e.g. scene.loadModel(url, options), or model data in options.data');
+      if (typeof opts.onError === 'function') opts.onError(err);
+      throw err;
+    }
+    let gltf;
+    try {
+      gltf = await loadGLTFModel(source, opts);
+    } catch (err) {
+      if (typeof opts.onError === 'function') opts.onError(err);
+      throw err;
+    }
+    if (!gltf || !gltf.scene) {
+      const err = new Error(`PhotonicScene.loadModel: the model from "${url || 'model data'}" parsed without a scene`);
+      if (typeof opts.onError === 'function') opts.onError(err);
+      throw err;
+    }
+    const handle = this._adoptExternalObject(gltf.scene, opts);
+    let formatBytes = data instanceof ArrayBuffer ? data : null;
+    if (!formatBytes && typeof Blob !== 'undefined' && data instanceof Blob) {
+      try { formatBytes = await data.arrayBuffer(); } catch { formatBytes = null; }
+    }
+    const info = {
+      format: modelFormatFor(url, formatBytes),
+      url: url || null,
+      animations: gltf.animations || [],
+      cameras: gltf.cameras || [],
+      asset: gltf.asset || null,
+      meshCount: this._collectObjectMeshes(gltf.scene).length
+    };
+    handle.getModelInfo = () => info;
+    handle.modelInfo = info;
+    if (typeof opts.onLoad === 'function') opts.onLoad(handle, info);
+    return handle;
   }
 
   _registerSceneObject(mesh, options = {}) {
@@ -1499,6 +1706,7 @@ export class PhotonicScene {
     window.removeEventListener('resize', this._resizeHandler);
     this.clearFrameCallback();
     this.controls.dispose();
+    this.clearEnvironment();
     this.clearBakedAmbientOcclusion();
     this.clearObjects();
     if (this._isWatchingClicks) {

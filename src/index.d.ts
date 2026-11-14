@@ -65,6 +65,33 @@ export interface CreateShapeOptions {
   [key: string]: unknown;
 }
 
+export interface MaterialOptions {
+  type?: 'standard' | 'physical' | 'basic' | 'phong' | 'shader';
+  physical?: boolean;
+  color?: ColorValue;
+  emissive?: ColorValue;
+  emissiveIntensity?: number;
+  roughness?: number;
+  metalness?: number;
+  clearcoat?: number;
+  clearcoatRoughness?: number;
+  clearcoatMap?: unknown;
+  clearcoatRoughnessMap?: unknown;
+  clearcoatNormalMap?: unknown;
+  envMapIntensity?: number;
+  opacity?: number;
+  transparent?: boolean;
+  side?: 'front' | 'back' | 'double';
+  wireframe?: boolean;
+  map?: unknown;
+  normalMap?: unknown;
+  emissiveMap?: unknown;
+  uniforms?: Record<string, unknown>;
+  vertexShader?: string;
+  fragmentShader?: string;
+  [key: string]: unknown;
+}
+
 export interface ExternalGeometryOptions {
   positions?: ArrayLike<number>;
   normals?: ArrayLike<number> | null;
@@ -73,6 +100,11 @@ export interface ExternalGeometryOptions {
   uvs?: ArrayLike<number> | null;
   geometry?: unknown;
   material?: unknown;
+  physical?: boolean;
+  materialType?: 'standard' | 'physical';
+  clearcoat?: number;
+  clearcoatRoughness?: number;
+  envMapIntensity?: number;
   color?: ColorValue;
   roughness?: number;
   metalness?: number;
@@ -96,6 +128,11 @@ export interface AddMeshOptions {
   group?: unknown;
   geometry?: unknown;
   material?: unknown;
+  physical?: boolean;
+  materialType?: 'standard' | 'physical';
+  clearcoat?: number;
+  clearcoatRoughness?: number;
+  envMapIntensity?: number;
   position?: Partial<Vector3Like>;
   rotation?: Partial<Vector3Like>;
   scale?: number | Partial<Vector3Like>;
@@ -105,6 +142,53 @@ export interface AddMeshOptions {
   disposeOnRemove?: boolean;
   onClick?: ((handle: SceneObjectHandle, event?: unknown) => void) | null;
   [key: string]: unknown;
+}
+
+export interface LoadModelOptions {
+  url?: string;
+  data?: ArrayBuffer | string | Blob;
+  buffer?: ArrayBuffer | string | Blob;
+  resourcePath?: string;
+  dracoDecoderPath?: string;
+  material?: unknown;
+  physical?: boolean;
+  materialType?: 'standard' | 'physical';
+  clearcoat?: number;
+  clearcoatRoughness?: number;
+  envMapIntensity?: number;
+  position?: Partial<Vector3Like>;
+  rotation?: Partial<Vector3Like>;
+  scale?: number | Partial<Vector3Like>;
+  castShadow?: boolean;
+  receiveShadow?: boolean;
+  name?: string;
+  disposeOnRemove?: boolean;
+  onClick?: ((handle: SceneObjectHandle, event?: unknown) => void) | null;
+  onProgress?: (event: unknown) => void;
+  onLoad?: (handle: ModelObjectHandle, info: LoadedModelInfo) => void;
+  onError?: (error: unknown) => void;
+  [key: string]: unknown;
+}
+
+export interface LoadedModelInfo {
+  format: 'gltf' | 'glb';
+  url: string | null;
+  animations: unknown[];
+  cameras: unknown[];
+  asset: Record<string, unknown> | null;
+  meshCount: number;
+}
+
+export interface ModelObjectHandle extends SceneObjectHandle {
+  getModelInfo(): LoadedModelInfo;
+  readonly modelInfo: LoadedModelInfo;
+}
+
+export interface GLTFLoadResult {
+  scene: unknown;
+  animations: unknown[];
+  cameras: unknown[];
+  asset: Record<string, unknown> | null;
 }
 
 export interface LoadSplatOptions {
@@ -188,11 +272,24 @@ export interface BakedAOInfo {
   ground?: { size: number; resolution: number; texelsShaded: number } | null;
 }
 
+export interface EnvironmentOptions {
+  intensity?: number;
+  background?: boolean;
+  sigma?: number;
+}
+
+export interface EnvironmentInfo {
+  enabled: boolean;
+  source: 'studio' | 'custom' | null;
+  intensity: number;
+}
+
 export interface PhotonicSceneOptions {
   exposure?: number;
   toneMapping?: ToneMappingMode;
   pixelRatioCap?: number;
   postProcessing?: boolean | PostProcessingOptions;
+  environment?: boolean | EnvironmentOptions;
 }
 
 export declare class PhotonicScene {
@@ -242,9 +339,15 @@ export declare class PhotonicScene {
   bakeAmbientOcclusion(options?: BakedAOOptions): BakedAOInfo;
   clearBakedAmbientOcclusion(): this;
   getBakedAOInfo(): BakedAOInfo;
+  setStudioEnvironment(options?: EnvironmentOptions): this;
+  setEnvironment(texture: unknown, options?: EnvironmentOptions): this;
+  setEnvironmentIntensity(intensity: number): this;
+  getEnvironmentIntensity(): number;
+  clearEnvironment(): this;
+  getEnvironmentInfo(): EnvironmentInfo;
   createPointLight(options?: Record<string, unknown>): LightHandle;
   createSpotLight(options?: Record<string, unknown>): LightHandle;
-  createMaterial(options?: Record<string, unknown>): unknown;
+  createMaterial(options?: MaterialOptions): unknown;
   loadTexture(url: string, options?: Record<string, unknown>): Promise<unknown>;
   createPlane(options?: CreateShapeOptions): SceneObjectHandle;
   createWall(options?: CreateShapeOptions & { rotationY?: number }): SceneObjectHandle;
@@ -254,6 +357,9 @@ export declare class PhotonicScene {
   addGeometry(options: ExternalGeometryOptions): SceneObjectHandle;
   addMesh(mesh: unknown, options?: AddMeshOptions): SceneObjectHandle;
   addMesh(options: AddMeshOptions & { mesh: unknown }): SceneObjectHandle;
+  loadModel(url: string, options?: LoadModelOptions): Promise<ModelObjectHandle>;
+  loadModel(options: LoadModelOptions & { url: string }): Promise<ModelObjectHandle>;
+  loadModel(options: LoadModelOptions & { data: ArrayBuffer | string | Blob }): Promise<ModelObjectHandle>;
   createArrow(options?: { origin?: Partial<Vector3Like>; direction?: Partial<Vector3Like>; length?: number; color?: ColorValue; headLength?: number; headWidth?: number }): SceneObjectHandle;
   setGridVisible(visible: boolean): void;
   setFloorVisible(visible: boolean): void;
@@ -683,6 +789,14 @@ export declare class PhotonicVirtualCamera {
 export declare function createVirtualCamera(options?: VirtualCameraOptions): PhotonicVirtualCamera;
 export declare function captureSceneStream(scene: PhotonicScene, options?: VirtualCameraOptions): MediaStream;
 export declare function captureOverlayStream(overlay: PhotonicOverlay, options?: VirtualCameraOptions): MediaStream;
+
+// Studio environment (F12)
+
+export declare function createStudioEnvironment(renderer: unknown, options?: { sigma?: number }): { texture: unknown; dispose(): void };
+
+// Model loading (F13)
+
+export declare function loadGLTFModel(source: string | LoadModelOptions | ArrayBuffer | Blob, options?: LoadModelOptions): Promise<GLTFLoadResult>;
 
 // Splat heuristics and XR pose math
 

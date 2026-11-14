@@ -138,3 +138,38 @@ scene.removeObject(handle);
 ```
 
 Adopted geometry is a full citizen of the scene: it casts and receives shadows under the same rules as a created object, and `scene.bakeAmbientOcclusion()` covers it exactly like one — it occludes its neighbours, it receives per-vertex darkening (a single solid shades its own recesses, such as a bore), vertex colours it arrived with are darkened rather than replaced, and the ground texture accounts for its footprint. The worked example is `examples/custom-geometry-demo/` in the repo, and the full record is in the repo's `design/F10-F11-EXTERNAL-GEOMETRY.md`.
+
+## Physical materials and the studio environment
+
+Clearcoat finishes — glossy paint, coated machined parts — use a physical material, available on every material path with the same options. Metals need an environment to reflect, and the scene can build a neutral studio one.
+
+```js
+// The factory, the geometry call, and adoption all take the same shape.
+const paint = scene.createMaterial({ type: 'physical', clearcoat: 1, clearcoatRoughness: 0.1 });
+const part = scene.addGeometry({ positions, normals, physical: true, clearcoat: 1, metalness: 0.9, roughness: 0.32 });
+const knob = scene.addMesh(mesh, { clearcoat: 0.8 }); // upgrades the mesh's own material, colour kept
+
+// A neutral studio environment as image-based light, with its strength as a plain control.
+scene.setStudioEnvironment({ intensity: 1 });
+scene.setEnvironmentIntensity(0.7);
+scene.getEnvironmentInfo(); // { enabled: true, source: 'studio', intensity: 0.7 }
+scene.clearEnvironment();
+```
+
+The worked example is `examples/physical-materials-demo/` in the repo, and the full record is in the repo's `design/F12-PHYSICAL-ENVIRONMENT.md`.
+
+## Loading a model file
+
+A model that already exists as a file loads with one call. The first format is glTF/GLB, the web standard, which carries hierarchy and materials; the parsed model is adopted through the same registration as everything else, so the handle is the standard one — transforms, shadow flags, removal, and the baked occlusion included.
+
+```js
+const part = await scene.loadModel('./reference-part.glb', {
+  name: 'reference-part',
+  position: { x: 0, y: 0.08, z: 0 }
+});
+part.getModelInfo(); // { format: 'glb', url, animations, cameras, asset, meshCount }
+part.setRotation(0, Math.PI / 4, 0);
+scene.bakeAmbientOcclusion(); // covers the loaded model like a created object
+```
+
+The options-bag and raw-bytes forms (`scene.loadModel({ url })`, `scene.loadModel({ data })` for an ArrayBuffer or Blob) work the same way, and the exported `loadGLTFModel` helper returns the parser's raw result for callers who manage their own adoption. Animations are carried and reported through getModelInfo, not played; drive a THREE.AnimationMixer over the handle's mesh to play one. The worked example is `examples/model-loader-demo/` in the repo, and the full record is in the repo's `design/F13-MODEL-LOADING.md`.
